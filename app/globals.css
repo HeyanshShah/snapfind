@@ -40,3 +40,22 @@ body {
   padding: 8px 14px; font-size: 14px;
 }
 .links a:hover { border-color: var(--accent); }
+
+/* Week 2: deal boxes and the offers list */
+.muted { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+.deal {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline;
+  background: #1f1a3a; border: 1px solid var(--accent); border-radius: 14px;
+  padding: 12px 14px; margin: 0 0 10px; color: var(--text); text-decoration: none;
+}
+.deal-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #b9a8ff; }
+.deal-price { grid-row: span 2; font-size: 24px; font-weight: 800; }
+.deal-store { font-size: 14px; color: var(--muted); }
+.offers { margin: 4px 0 16px; }
+.offers summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.offers ul { list-style: none; padding: 0; margin: 8px 0 0; }
+.offers li a {
+  display: flex; justify-content: space-between; gap: 12px; padding: 8px 0;
+  border-bottom: 1px solid #262630; color: var(--text); text-decoration: none; font-size: 14px;
+}
+.offers em { color: var(--muted); font-style: normal; }

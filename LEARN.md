@@ -71,6 +71,50 @@ It takes the item's name and builds search links for Google Shopping, Amazon, an
 - **React**: the library that draws the screen and redraws it when state changes.
 - **SDK**: a ready-made helper library for talking to a service (here, the AI service).
 
+## Week 2: comparing prices (explained like you're 10)
+
+### The big picture
+
+Last week the app said "here are some stores, go check them yourself." Now the app **checks the stores for you**:
+
+```
+ 1. The AI says "it's an Air Jordan 1 Chicago"
+ 2. The phone asks our server: /api/prices?q=Air Jordan 1 Chicago
+ 3. The server asks Google Shopping AND eBay at the same time
+ 4. Each answer gets turned into the same "price tag" shape (an Offer)
+ 5. The judge (bestDeal.ts) throws out junk and picks the winners
+ 6. The phone shows: Best new deal, Best used deal, and every offer
+```
+
+### The new files
+
+**`lib/prices/types.ts`: the price tag.** Google and eBay describe prices in totally different ways. Google says `"delivery": "$5.99 delivery"`, while eBay says `"shippingCost": {"value": "5.99"}`. So we invented one price tag (`Offer`) and make every source fill it in. Then the rest of the app only has to read one kind of tag. This trick is called **normalizing** data, and it comes up a lot in interviews.
+
+**`lib/prices/google.ts`: asking Google Shopping.** Google doesn't let apps read Shopping results directly, so a company called **SerpApi** does the search and sends back neat data. `parseShipping` reads text like "Free delivery" and turns it into a number. A **regular expression** (the `/\$\s?([\d,]+...)/` thing) is a pattern-matcher for text, kind of like "find a dollar sign followed by numbers."
+
+**`lib/prices/ebay.ts`: asking eBay.** eBay's API is official and free, but it wants a **day pass** first. We trade our ID and secret for an **access token** that lasts about 2 hours. We save it (**caching**) and reuse it, instead of logging in before every single search.
+
+**`lib/prices/bestDeal.ts`: the judge.** It has four rules:
+1. **Throw out junk.** Search "Jordan 1" and you also get $9 shoelaces. We find the **median** (the middle price, where half are cheaper and half are pricier) and drop anything under 35% of it.
+2. **Split new and used.** A used shoe isn't a fair fight against a new one.
+3. **Only trusted sellers can win.** That means famous stores, 4+ star stores, or eBay sellers with 98%+ positive reviews from at least 50 buyers. Untrusted ones still show in the list, labeled "unverified seller," but they can't be picked as the best deal.
+4. **Compare the total.** $150 + $15 shipping = $165, which loses to $160 with free shipping.
+
+**`lib/prices/index.ts`: the manager.** It uses `Promise.allSettled` to ask every source **at the same time**. If Google takes 2 seconds and eBay takes 2 seconds, we wait 2 seconds total, not 4. And if eBay breaks, we still show Google's prices instead of crashing. That's called **graceful degradation**.
+
+**`app/api/prices/route.ts`: the new door.** It's a separate door from `/api/identify` so the phone can show *what* the item is right away and fill in prices a moment later. Nobody stares at a blank screen.
+
+**`lib/prices/prices.test.ts`: the robot checkers.** Ten tests make sure the judge follows its rules, for example "untrusted sellers never win" and "shipping counts." Run them with `npm test`. If you change the code and break a rule, a test turns red and tells you.
+
+### New words
+
+- **Normalize**: turn differently-shaped data into one shape.
+- **Access token**: a temporary pass that proves you're allowed to use an API.
+- **Cache**: saving an answer so you don't have to fetch it again.
+- **Median**: the middle number when you line them all up.
+- **Parallel requests**: asking several places at once instead of one by one.
+- **Unit test**: a tiny automatic check for one piece of code.
+
 ## What's honest about week 1
 
-The price is the AI's **estimate** of the typical price, not a live price from a store. That's why it says "typical price." In week 2 we'll fetch **real live prices** and build our own image search so repeat items are instant.
+The price is the AI's **estimate** of the typical price, not a live price from a store. That's why it says "typical price." Week 2 (above) adds **real live prices**. The AI's estimate is still shown as "typical price" next to them.

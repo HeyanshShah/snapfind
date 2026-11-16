@@ -6,8 +6,29 @@
 import { useState } from "react";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
+import type { PriceReport } from "@/lib/prices/index";
+import type { Offer } from "@/lib/prices/types";
 
 type Result = { item: Item; links: ShopLink[] };
+
+// Shows money nicely: 159.5 -> "$159.50", 160 -> "$160".
+function money(n: number): string {
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+}
+
+// One deal box: "Best new deal: $160 at Nike, free shipping".
+function DealCard({ label, offer }: { label: string; offer: Offer }) {
+  return (
+    <a className="deal" href={offer.url} target="_blank" rel="noopener noreferrer">
+      <span className="deal-label">{label}</span>
+      <span className="deal-price">{money(offer.total)}</span>
+      <span className="deal-store">
+        {offer.store}
+        {offer.shipping === 0 ? " · free shipping" : offer.shipping ? ` · incl. ${money(offer.shipping)} shipping` : " · shipping not listed"}
+      </span>
+    </a>
+  );
+}
 
 // Phone photos are huge (often 4000+ pixels wide). We shrink them to 1024 pixels before
 // sending. That makes uploads way faster, and the AI can still see plenty of detail.
@@ -29,6 +50,19 @@ export default function Home() {
   const [loading, setLoading] = useState(false); // are we waiting for the AI?
   const [result, setResult] = useState<Result | null>(null); // the AI's answer
   const [error, setError] = useState<string | null>(null); // any problem to show
+  const [prices, setPrices] = useState<PriceReport | null>(null); // live prices from stores
+  const [pricesLoading, setPricesLoading] = useState(false);
+
+  // Step 2, after we know WHAT the item is: ask our server to check prices at every store.
+  async function loadPrices(query: string) {
+    setPricesLoading(true);
+    try {
+      const res = await fetch(`/api/prices?q=${encodeURIComponent(query)}`);
+      if (res.ok) setPrices(await res.json());
+    } finally {
+      setPricesLoading(false);
+    }
+  }
 
   // Runs when the user picks or takes a photo.
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -37,6 +71,7 @@ export default function Home() {
 
     setResult(null);
     setError(null);
+    setPrices(null);
     setPreview(URL.createObjectURL(file));
     setLoading(true);
 
@@ -49,6 +84,8 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
       setResult(data);
+      // Show the item right away, then fetch prices in the background (no "await" here).
+      if (data.item.found) loadPrices(data.item.searchQuery);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -94,6 +131,38 @@ export default function Home() {
               <span className="est"> typical price</span>
             </p>
           )}
+
+          {pricesLoading && <p className="muted">Checking prices at every store...</p>}
+
+          {prices?.bestNew && <DealCard label="Best new deal" offer={prices.bestNew} />}
+          {prices?.bestUsed && <DealCard label="Best used deal" offer={prices.bestUsed} />}
+          {prices?.savings ? (
+            <p className="muted">Saves you {money(prices.savings)} vs. the priciest store we found.</p>
+          ) : null}
+
+          {prices && prices.offers.length > 0 && (
+            <details className="offers">
+              <summary>All {prices.offers.length} offers from {prices.sourcesUsed.join(" + ")}</summary>
+              <ul>
+                {prices.offers.slice(0, 15).map((o, i) => (
+                  <li key={i}>
+                    <a href={o.url} target="_blank" rel="noopener noreferrer">
+                      <span>
+                        {o.store}
+                        {o.condition === "used" && <em> · used</em>}
+                        {!o.trusted && <em> · unverified seller</em>}
+                      </span>
+                      <strong>{money(o.total)}</strong>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {prices?.configured && prices.offers.length === 0 && !pricesLoading && (
+            <p className="muted">No live prices found. Try the store links below.</p>
+          )}
+
           <div className="links">
             {result!.links.map((l) => (
               <a key={l.store} href={l.url} target="_blank" rel="noopener noreferrer">
