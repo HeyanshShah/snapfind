@@ -33,5 +33,5 @@ Run the tests with `npm test`.
 
 - [x] **Week 1:** snap, identify with AI, estimated price, store links
 - [x] **Week 2:** live prices from Google Shopping and eBay, best new and used deal picker
-- [ ] **Week 3:** our own image search index for instant repeat lookups, history, share cards
+- [x] **Week 3:** instant repeat lookups (photo fingerprints and caching), snap history, share cards
 - [ ] **Weeks 4–5:** affiliate links, analytics, launch

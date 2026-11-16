@@ -8,6 +8,8 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { identifyItem } from "@/lib/identify";
 import { buildShopLinks } from "@/lib/shopLinks";
+import { dHash } from "@/lib/imageHash";
+import { identifyCache, findSimilar } from "@/lib/memory";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type Allowed = (typeof ALLOWED)[number];
@@ -30,14 +32,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "That photo is too big (max 5 MB)." }, { status: 400 });
   }
 
-  // 2. Turn the photo into base64 text so it can be sent to the AI.
-  const base64 = Buffer.from(await photo.arrayBuffer()).toString("base64");
+  const bytes = Buffer.from(await photo.arrayBuffer());
 
-  // 3. Ask the AI, and catch problems so the app shows a friendly message instead of crashing.
+  // 2. Make the photo's fingerprint. Have we seen this photo (or one almost like it) before?
+  //    If so, answer instantly from memory: no waiting, and no paying the AI again.
+  let hash: string | null = null;
+  try {
+    hash = await dHash(bytes);
+    const remembered = findSimilar(hash);
+    if (remembered) {
+      const links = remembered.found ? buildShopLinks(remembered.searchQuery, remembered.category) : [];
+      return NextResponse.json({ item: remembered, links, cached: true });
+    }
+  } catch {
+    // If fingerprinting fails (weird file), just skip the shortcut and ask the AI.
+  }
+
+  // 3. Turn the photo into base64 text so it can be sent to the AI.
+  const base64 = bytes.toString("base64");
+
+  // 4. Ask the AI, and catch problems so the app shows a friendly message instead of crashing.
   try {
     const item = await identifyItem(base64, photo.type as Allowed);
+    // Only remember real products. A blurry "nothing found" photo isn't worth remembering.
+    if (hash && item.found) identifyCache.set(hash, item);
     const links = item.found ? buildShopLinks(item.searchQuery, item.category) : [];
-    return NextResponse.json({ item, links });
+    return NextResponse.json({ item, links, cached: false });
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
       return NextResponse.json({ error: "Too many people at once. Try again in a few seconds." }, { status: 429 });

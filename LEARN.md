@@ -115,6 +115,46 @@ Last week the app said "here are some stores, go check them yourself." Now the a
 - **Parallel requests**: asking several places at once instead of one by one.
 - **Unit test**: a tiny automatic check for one piece of code.
 
+## Week 3: instant repeats, history, and share cards
+
+### Instant repeats: the app remembers
+
+If 100 people snap the same hyped sneaker, why ask the AI 100 times? Now the server **remembers** answers.
+
+**`lib/imageHash.ts`: a photo fingerprint.** We shrink the photo to a tiny 9x8 gray picture, so all the small details disappear. Then in each row we ask, "is this pixel brighter than the one to its right?" Yes = 1, no = 0. That gives 64 ones and zeros, the **fingerprint**. Two photos of the same thing get almost the same fingerprint, even if one is brighter or a different size.
+
+To compare two fingerprints, we count how many of the 64 spots are different. That's the **Hamming distance**. 0 means identical. Our tests show slightly-changed copies land at 6 or under, and different pictures land above 20.
+
+**`lib/cache.ts`: short-term memory with two rules.**
+1. **Things expire.** AI answers last a week (a Jordan 1 is still a Jordan 1), but prices only last 30 minutes, since prices change.
+2. **Limited space.** When it's full, it forgets whatever was used longest ago. That's called **LRU** (Least Recently Used). A JavaScript `Map` remembers the order things were added, so the oldest one is always first in line.
+
+**`lib/memory.ts`: where the two memories live.** `identifyCache` maps photo fingerprints to AI answers, and `priceCache` maps search words to prices. `findSimilar` looks for a remembered fingerprint within 6 bits of the new one.
+
+**Why it matters:** a remembered answer comes back instantly, shown with a ⚡ instant badge, and costs $0. Our full test proved it: we snapped the same photo twice and the AI was asked only once.
+
+**Honest limit:** this catches the *same or almost-the-same photo*, like a re-upload or a slightly different shot. Recognizing "a different photo of the same shoe" needs an AI that turns pictures into number lists (called **embeddings**). That's a good future upgrade.
+
+### History: a notebook in your browser
+
+`localStorage` is a tiny notebook every browser gives each website. We save your last 20 snaps there: a 160px thumbnail, what it was, and the prices. No account or server needed. Tap an old snap and it reopens instantly. Everything is wrapped in `try/catch` because some browsers (like private mode) block the notebook, and then the app just skips history instead of crashing.
+
+### Share cards: made for TikTok and Instagram
+
+**`app/api/card/route.tsx`** draws a 1080x1350 picture that says "I snapped a photo and found ... $180 at Nike, saved $74." We describe it with the same HTML-style code as the page, and Next.js's `ImageResponse` turns it into a PNG. The **Share this find** button uses the phone's own share sheet (`navigator.share`), so you can send it straight to Instagram, TikTok, or Messages. On a computer it downloads the picture instead.
+
+Every share is free advertising. That's how apps go viral: the thing people post *is* the ad.
+
+### New words
+
+- **Hash / fingerprint**: a short code that represents something bigger.
+- **Hamming distance**: how many spots differ between two codes.
+- **Cache**: saved answers you can reuse.
+- **TTL (time to live)**: how long a saved answer stays valid.
+- **LRU**: when full, forget the least recently used thing.
+- **localStorage**: a small notebook the browser keeps for each website.
+- **Embeddings**: a way to turn pictures or text into lists of numbers, so "similar" things end up with similar numbers.
+
 ## What's honest about week 1
 
 The price is the AI's **estimate** of the typical price, not a live price from a store. That's why it says "typical price." Week 2 (above) adds **real live prices**. The AI's estimate is still shown as "typical price" next to them.

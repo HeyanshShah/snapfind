@@ -59,3 +59,21 @@ body {
   border-bottom: 1px solid #262630; color: var(--text); text-decoration: none; font-size: 14px;
 }
 .offers em { color: var(--muted); font-style: normal; }
+
+/* Week 3: instant badge, share button, history */
+.instant { color: #ffd166; }
+.share {
+  width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 999px;
+  background: var(--text); color: var(--bg); font-weight: 700; font-size: 16px; cursor: pointer;
+}
+.share:disabled { opacity: 0.5; }
+.history { margin-top: 40px; text-align: left; }
+.history h3 { font-size: 16px; color: var(--muted); margin: 0 0 12px; }
+.history-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.history-item {
+  display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: none;
+  color: var(--text); text-align: left; cursor: pointer; min-width: 0;
+}
+.history-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; background: var(--card); }
+.history-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-price { font-size: 13px; font-weight: 700; }

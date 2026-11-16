@@ -3,13 +3,46 @@
 // (in their browser), so it can open the camera and react when they tap buttons.
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
 import type { PriceReport } from "@/lib/prices/index";
 import type { Offer } from "@/lib/prices/types";
 
-type Result = { item: Item; links: ShopLink[] };
+type Result = { item: Item; links: ShopLink[]; cached?: boolean };
+
+// One saved snap in your history.
+type Snap = { id: string; at: number; thumb: string; result: Result; prices: PriceReport | null };
+
+// History is saved in the phone's own browser storage ("localStorage"), so it needs no
+// account and no server. It's like a notebook that stays in your browser.
+const HISTORY_KEY = "snapfind-history";
+const HISTORY_MAX = 20;
+
+function loadHistory(): Snap[] {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+  } catch {
+    return []; // private browsing or a broken notebook: just start empty
+  }
+}
+
+function saveHistory(snaps: Snap[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(snaps.slice(0, HISTORY_MAX)));
+  } catch {
+    // Storage full or blocked. History is a nice extra, so the app keeps working without it.
+  }
+}
+
+// Turns a picture into a "data URL": the whole image written as text, so it can be saved.
+function toDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
+}
 
 // Shows money nicely: 159.5 -> "$159.50", 160 -> "$160".
 function money(n: number): string {
@@ -52,15 +85,65 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null); // any problem to show
   const [prices, setPrices] = useState<PriceReport | null>(null); // live prices from stores
   const [pricesLoading, setPricesLoading] = useState(false);
+  const [history, setHistory] = useState<Snap[]>([]);
+
+  // useEffect with [] runs once, right after the page first appears: open the notebook.
+  useEffect(() => setHistory(loadHistory()), []);
+
+  // Adds or updates one snap in the history (newest first), on screen and in storage.
+  function remember(snap: Snap) {
+    setHistory((old) => {
+      const next = [snap, ...old.filter((s) => s.id !== snap.id)].slice(0, HISTORY_MAX);
+      saveHistory(next);
+      return next;
+    });
+  }
 
   // Step 2, after we know WHAT the item is: ask our server to check prices at every store.
-  async function loadPrices(query: string) {
+  async function loadPrices(query: string, snap: Snap) {
     setPricesLoading(true);
     try {
       const res = await fetch(`/api/prices?q=${encodeURIComponent(query)}`);
-      if (res.ok) setPrices(await res.json());
+      if (res.ok) {
+        const report: PriceReport = await res.json();
+        setPrices(report);
+        remember({ ...snap, prices: report }); // save the prices with the snap
+      }
     } finally {
       setPricesLoading(false);
+    }
+  }
+
+  // Re-opens an old snap from history, no AI or price check needed.
+  function openSnap(snap: Snap) {
+    setPreview(snap.thumb);
+    setResult(snap.result);
+    setPrices(snap.prices);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Share button: make the share card picture, then open the phone's share sheet
+  // (Instagram, TikTok, Messages...). Computers without a share sheet download it instead.
+  async function share() {
+    if (!result) return;
+    const best = prices?.bestNew ?? prices?.bestUsed;
+    const params = new URLSearchParams({ name: result.item.name });
+    if (best) {
+      params.set("price", money(best.total));
+      params.set("store", best.store);
+    }
+    if (prices?.savings) params.set("save", money(prices.savings));
+
+    const blob = await (await fetch(`/api/card?${params}`)).blob();
+    const file = new File([blob], "snapfind.png", { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: "SnapFind" }).catch(() => {}); // cancel = fine
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "snapfind.png";
+      a.click();
     }
   }
 
@@ -84,8 +167,13 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
       setResult(data);
-      // Show the item right away, then fetch prices in the background (no "await" here).
-      if (data.item.found) loadPrices(data.item.searchQuery);
+      if (data.item.found) {
+        // Save it to history with a tiny 160px thumbnail (big photos would fill up storage).
+        const snap: Snap = { id: crypto.randomUUID(), at: Date.now(), thumb: await toDataUrl(await shrinkPhoto(file, 160)), result: data, prices: null };
+        remember(snap);
+        // Show the item right away, then fetch prices in the background (no "await" here).
+        loadPrices(data.item.searchQuery, snap);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -121,6 +209,7 @@ export default function Home() {
         <section className="card">
           <p className="category">
             {item.category} · {item.confidence} confidence
+            {result?.cached && <span className="instant"> · ⚡ instant</span>}
           </p>
           <h2>{item.name}</h2>
           <p className="desc">{item.description}</p>
@@ -169,6 +258,28 @@ export default function Home() {
                 {l.store} →
               </a>
             ))}
+          </div>
+
+          <button className="share" onClick={share} disabled={pricesLoading}>
+            Share this find
+          </button>
+        </section>
+      )}
+
+      {history.length > 0 && (
+        <section className="history">
+          <h3>Your recent snaps</h3>
+          <div className="history-grid">
+            {history.map((snap) => {
+              const best = snap.prices?.bestNew ?? snap.prices?.bestUsed;
+              return (
+                <button key={snap.id} className="history-item" onClick={() => openSnap(snap)}>
+                  <img src={snap.thumb} alt="" />
+                  <span className="history-name">{snap.result.item.name}</span>
+                  {best && <span className="history-price">{money(best.total)}</span>}
+                </button>
+              );
+            })}
           </div>
         </section>
       )}
