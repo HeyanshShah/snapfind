@@ -155,6 +155,43 @@ Every share is free advertising. That's how apps go viral: the thing people post
 - **localStorage**: a small notebook the browser keeps for each website.
 - **Embeddings**: a way to turn pictures or text into lists of numbers, so "similar" things end up with similar numbers.
 
+## Weeks 4 and 5: making money and going public
+
+### Affiliate links: how the app earns money (`lib/affiliate.ts`)
+
+Amazon and eBay pay a small cut (about 1 to 4%) when someone buys through **your** link, and the buyer pays nothing extra. Your link is just the normal link with your ID on the end, like `?tag=yourname-20` for Amazon. `addAffiliate` adds the right ID to the right store's links. With no ID set up, links stay normal.
+
+Two careful details:
+- We check the store's address properly, so a fake address like `ebay.com.scam.test` doesn't get treated as eBay.
+- US law (the FTC) says you must tell people when links can earn you money, so the app shows "SnapFind may earn a commission" whenever affiliate IDs are on. Links also get `rel="sponsored"`, which tells Google they're paid links.
+
+### The bouncer: rate limiting (`lib/rateLimit.ts`)
+
+Once the app is public, someone could send 10,000 photos and drain your AI credit. Each visitor (known by their internet address, the **IP**) gets a bucket that counts their tries: 30 photos an hour, 60 price checks an hour. When the bucket's full, they get a polite "slow down" message, and the bucket empties when the hour's up. Our test sent 31 photos from one address: the 31st was blocked, and a different visitor was fine.
+
+### Demo mode (`lib/demo.ts`)
+
+With no AI key yet, the app shows a clearly labeled **sample** result instead of an error. That means the live link works from day one. The sample prices still go through the real best-deal judge, so the demo shows the real logic.
+
+### Usage tracking
+
+`@vercel/analytics` counts visits, plus events we send with `track()`: **snap**, **deal_click**, **offer_click**, **store_link_click**, and **share**. That shows things like "how many snaps turn into a click?", which is called a **conversion rate**. It uses no cookies and collects no personal info.
+
+### Going online
+
+The **Deploy with Vercel** button in the README copies the project to Vercel, a free host, and asks for your keys. Every time new code lands on `main`, Vercel puts the new version online by itself. That's called **continuous deployment**.
+
+**Honest limit:** our caches and rate limits live in the server's memory. Vercel can run several copies of the server, and each copy has its own memory, so a repeat photo might hit a copy that hasn't seen it yet. For a big launch we'd move them to a shared store like Redis. It's a good "how would you scale this?" interview answer.
+
+### New words
+
+- **Affiliate link**: a link with your ID that earns a commission on purchases.
+- **Rate limit**: a cap on how often one visitor can do something.
+- **IP address**: a device's address on the internet.
+- **Conversion rate**: the share of people who take the next step (like snap, then click buy).
+- **Continuous deployment**: new code goes live automatically.
+- **Environment variables**: secret settings (like keys) kept outside the code.
+
 ## What's honest about week 1
 
 The price is the AI's **estimate** of the typical price, not a live price from a store. That's why it says "typical price." Week 2 (above) adds **real live prices**. The AI's estimate is still shown as "typical price" next to them.

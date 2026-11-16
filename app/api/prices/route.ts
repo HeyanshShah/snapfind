@@ -6,11 +6,22 @@
 import { NextResponse } from "next/server";
 import { getPrices } from "@/lib/prices/index.ts";
 import { priceCache } from "@/lib/memory";
+import { RateLimiter, visitorId } from "@/lib/rateLimit";
+import { demoMode, demoPrices } from "@/lib/demo";
+
+// 60 price checks per visitor per hour (each one uses up free searches on the price sites).
+const limiter = new RateLimiter(60, 60 * 60 * 1000);
 
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams.get("q")?.trim();
   if (!q) return NextResponse.json({ error: "Missing search words." }, { status: 400 });
   if (q.length > 200) return NextResponse.json({ error: "Search is too long." }, { status: 400 });
+  if (demoMode()) return NextResponse.json({ ...demoPrices(), demo: true });
+
+  const wait = limiter.check(visitorId(request));
+  if (wait > 0) {
+    return NextResponse.json({ error: "Too many price checks. Try again soon." }, { status: 429, headers: { "Retry-After": String(wait) } });
+  }
 
   // Same search in the last 30 minutes? Reuse those prices instead of asking the stores again.
   // We lowercase and squish spaces so "Jordan 1" and "jordan  1" count as the same search.

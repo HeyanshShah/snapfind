@@ -5,6 +5,7 @@
 import { searchGoogle } from "./google.ts";
 import { searchEbay } from "./ebay.ts";
 import { compareOffers, type Comparison } from "./bestDeal.ts";
+import { addAffiliate } from "../affiliate.ts";
 
 export type PriceReport = Comparison & {
   sourcesUsed: string[]; // which sources answered
@@ -26,7 +27,8 @@ export async function getPrices(query: string): Promise<PriceReport> {
   const offers = results.flatMap((r, i) => {
     if (r.status === "fulfilled") {
       sourcesUsed.push(sources[i].name);
-      return r.value;
+      // Turn each buy link into an affiliate link (if that store's program is set up).
+      return r.value.map((o) => ({ ...o, url: addAffiliate(o.url) }));
     }
     console.error(`${sources[i].name} failed:`, r.reason);
     sourcesFailed.push(sources[i].name);

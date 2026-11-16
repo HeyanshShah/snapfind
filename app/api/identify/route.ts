@@ -10,6 +10,13 @@ import { identifyItem } from "@/lib/identify";
 import { buildShopLinks } from "@/lib/shopLinks";
 import { dHash } from "@/lib/imageHash";
 import { identifyCache, findSimilar } from "@/lib/memory";
+import { RateLimiter, visitorId } from "@/lib/rateLimit";
+import { demoMode, DEMO_ITEM } from "@/lib/demo";
+import { affiliatesOn } from "@/lib/affiliate";
+
+// Each visitor gets 30 photo checks per hour. Plenty for real people, but it stops
+// anyone from spamming the AI and burning through your credit.
+const limiter = new RateLimiter(30, 60 * 60 * 1000);
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type Allowed = (typeof ALLOWED)[number];
@@ -19,6 +26,15 @@ const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
 // "POST" means "the phone is sending us something" (the photo).
 export async function POST(request: Request) {
+  // 0. The bouncer: too many photos from this visitor lately? Ask them to wait.
+  const wait = limiter.check(visitorId(request));
+  if (wait > 0) {
+    return NextResponse.json(
+      { error: `Whoa, slow down! Try again in ${Math.ceil(wait / 60)} min.` },
+      { status: 429, headers: { "Retry-After": String(wait) } },
+    );
+  }
+
   // 1. Open the package the phone sent and pull out the photo.
   const form = await request.formData();
   const photo = form.get("photo");
@@ -32,6 +48,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "That photo is too big (max 5 MB)." }, { status: 400 });
   }
 
+  // No AI key yet? Show a clearly labeled sample answer so the app still demos well.
+  if (demoMode()) {
+    return NextResponse.json({ item: DEMO_ITEM, links: buildShopLinks(DEMO_ITEM.searchQuery, DEMO_ITEM.category), demo: true, affiliate: affiliatesOn() });
+  }
+
   const bytes = Buffer.from(await photo.arrayBuffer());
 
   // 2. Make the photo's fingerprint. Have we seen this photo (or one almost like it) before?
@@ -42,7 +63,7 @@ export async function POST(request: Request) {
     const remembered = findSimilar(hash);
     if (remembered) {
       const links = remembered.found ? buildShopLinks(remembered.searchQuery, remembered.category) : [];
-      return NextResponse.json({ item: remembered, links, cached: true });
+      return NextResponse.json({ item: remembered, links, cached: true, affiliate: affiliatesOn() });
     }
   } catch {
     // If fingerprinting fails (weird file), just skip the shortcut and ask the AI.
@@ -57,7 +78,7 @@ export async function POST(request: Request) {
     // Only remember real products. A blurry "nothing found" photo isn't worth remembering.
     if (hash && item.found) identifyCache.set(hash, item);
     const links = item.found ? buildShopLinks(item.searchQuery, item.category) : [];
-    return NextResponse.json({ item, links, cached: false });
+    return NextResponse.json({ item, links, cached: false, affiliate: affiliatesOn() });
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
       return NextResponse.json({ error: "Too many people at once. Try again in a few seconds." }, { status: 429 });

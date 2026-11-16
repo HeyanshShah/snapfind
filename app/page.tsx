@@ -4,12 +4,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { track } from "@vercel/analytics";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
 import type { PriceReport } from "@/lib/prices/index";
 import type { Offer } from "@/lib/prices/types";
 
-type Result = { item: Item; links: ShopLink[]; cached?: boolean };
+type Result = { item: Item; links: ShopLink[]; cached?: boolean; demo?: boolean; affiliate?: boolean };
 
 // One saved snap in your history.
 type Snap = { id: string; at: number; thumb: string; result: Result; prices: PriceReport | null };
@@ -52,7 +53,13 @@ function money(n: number): string {
 // One deal box: "Best new deal: $160 at Nike, free shipping".
 function DealCard({ label, offer }: { label: string; offer: Offer }) {
   return (
-    <a className="deal" href={offer.url} target="_blank" rel="noopener noreferrer">
+    <a
+      className="deal"
+      href={offer.url}
+      target="_blank"
+      rel="noopener noreferrer sponsored"
+      onClick={() => track("deal_click", { store: offer.store, total: offer.total })}
+    >
       <span className="deal-label">{label}</span>
       <span className="deal-price">{money(offer.total)}</span>
       <span className="deal-store">
@@ -137,6 +144,7 @@ export default function Home() {
 
     const blob = await (await fetch(`/api/card?${params}`)).blob();
     const file = new File([blob], "snapfind.png", { type: "image/png" });
+    track("share", { item: result.item.name });
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: "SnapFind" }).catch(() => {}); // cancel = fine
     } else {
@@ -167,6 +175,8 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
       setResult(data);
+      // Usage tracking: count snaps, and whether the AI found something.
+      track("snap", { found: data.item.found, cached: Boolean(data.cached), category: data.item.category || "none" });
       if (data.item.found) {
         // Save it to history with a tiny 160px thumbnail (big photos would fill up storage).
         const snap: Snap = { id: crypto.randomUUID(), at: Date.now(), thumb: await toDataUrl(await shrinkPhoto(file, 160)), result: data, prices: null };
@@ -194,6 +204,10 @@ export default function Home() {
         {loading ? "Looking..." : preview ? "Snap another" : "Snap something"}
         <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
       </label>
+
+      {result?.demo && (
+        <p className="demo-banner">Demo mode: showing a sample result. Real recognition turns on once the AI key is added.</p>
+      )}
 
       {preview && <img className="preview" src={preview} alt="Your photo" />}
 
@@ -235,7 +249,12 @@ export default function Home() {
               <ul>
                 {prices.offers.slice(0, 15).map((o, i) => (
                   <li key={i}>
-                    <a href={o.url} target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={o.url}
+                      target="_blank"
+                      rel="noopener noreferrer sponsored"
+                      onClick={() => track("offer_click", { store: o.store, total: o.total })}
+                    >
                       <span>
                         {o.store}
                         {o.condition === "used" && <em> · used</em>}
@@ -254,7 +273,13 @@ export default function Home() {
 
           <div className="links">
             {result!.links.map((l) => (
-              <a key={l.store} href={l.url} target="_blank" rel="noopener noreferrer">
+              <a
+                key={l.store}
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer sponsored"
+                onClick={() => track("store_link_click", { store: l.store })}
+              >
                 {l.store} →
               </a>
             ))}
@@ -263,6 +288,8 @@ export default function Home() {
           <button className="share" onClick={share} disabled={pricesLoading}>
             Share this find
           </button>
+          {/* US law (the FTC) says you must tell people when links can earn you money. */}
+          {result?.affiliate && <p className="disclosure">SnapFind may earn a commission from purchases through these links.</p>}
         </section>
       )}
 

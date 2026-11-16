@@ -1,6 +1,8 @@
 // lib/shopLinks.ts
 // Turns the item's name into "Buy it here" links for different stores.
-// This week we just build search links. In week 2 we'll fetch real live prices.
+// Every link goes through addAffiliate, so purchases can earn a commission.
+
+import { addAffiliate } from "./affiliate.ts";
 
 export type ShopLink = { store: string; url: string };
 
@@ -22,5 +24,5 @@ export function buildShopLinks(searchQuery: string, category: string): ShopLink[
     links.push({ store: "GOAT", url: `https://www.goat.com/search?query=${q}` });
   }
 
-  return links;
+  return links.map((l) => ({ ...l, url: addAffiliate(l.url) }));
 }
