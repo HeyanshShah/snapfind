@@ -225,7 +225,7 @@ SnapFind can now use **two different AIs**, and picks one by itself:
 **Inside `gemini.ts`:**
 - `z.toJSONSchema(ItemSchema)` turns our form into **JSON Schema**, the standard format Gemini understands, so Gemini answers only in that shape.
 - `ItemSchema.safeParse(...)` double-checks the answer anyway. Never fully trust data from outside your app.
-- `gemini-flash-latest` always points to Google's newest fast model, so the app doesn't break when they retire an old one.
+- **Fallback chain:** free models are sometimes "busy" or get retired. So the app tries a list of models, best first (`gemini-3.8-flash`, then two "lite" models), and moves to the next one when Google says busy (503), too many requests (429), or gone (404). In real testing, the top model was busy and a lite model answered in about 1 second.
 
 **`lib/ai/errors.ts`:** each company reports problems differently, so we translate them into two errors of our own: `AiBusyError` (too many requests, like hitting the free daily limit) and `AiKeyError` (bad key). The server route only has to handle those two.
 
