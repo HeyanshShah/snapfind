@@ -13,6 +13,11 @@ export type PriceReport = Comparison & {
   configured: boolean; // false if no price keys are set up at all
 };
 
+// True when at least one price source has its keys set up.
+export function priceSourcesConfigured(): boolean {
+  return Boolean(process.env.SERPAPI_KEY || (process.env.EBAY_CLIENT_ID && process.env.EBAY_CLIENT_SECRET));
+}
+
 export async function getPrices(query: string): Promise<PriceReport> {
   const sources = [
     { name: "Google Shopping", run: searchGoogle, on: Boolean(process.env.SERPAPI_KEY) },

@@ -84,3 +84,20 @@ body {
   background: #3a2f0b; color: #ffd166;
 }
 .disclosure { font-size: 12px; color: var(--muted); margin: 10px 0 0; text-align: center; }
+
+/* Type-it-instead search box */
+.typed { display: flex; gap: 8px; margin: 16px auto 0; max-width: 360px; }
+.typed input {
+  flex: 1; min-width: 0; padding: 12px 16px; border-radius: 999px; border: 1px solid #333;
+  background: var(--card); color: var(--text); font-size: 16px; /* 16px stops iPhones from zooming in */
+}
+.typed input:focus { outline: none; border-color: var(--accent); }
+.typed button {
+  padding: 12px 18px; border-radius: 999px; border: 0; background: var(--card); color: var(--text);
+  font-weight: 700; cursor: pointer;
+}
+.typed button:disabled { opacity: 0.5; }
+.history-typed {
+  display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 1;
+  border-radius: 12px; background: var(--card); font-size: 32px; font-weight: 800; color: var(--accent);
+}

@@ -10,7 +10,8 @@ import type { ShopLink } from "@/lib/shopLinks";
 import type { PriceReport } from "@/lib/prices/index";
 import type { Offer } from "@/lib/prices/types";
 
-type Result = { item: Item; links: ShopLink[]; cached?: boolean; demo?: boolean; affiliate?: boolean };
+type Result = { item: Item; links: ShopLink[]; cached?: boolean; demo?: boolean; affiliate?: boolean; typed?: boolean };
+type PricesResponse = PriceReport & { links: ShopLink[]; affiliate: boolean };
 
 // One saved snap in your history.
 type Snap = { id: string; at: number; thumb: string; result: Result; prices: PriceReport | null };
@@ -110,20 +111,46 @@ export default function Home() {
   async function loadPrices(query: string, snap: Snap) {
     setPricesLoading(true);
     try {
-      const res = await fetch(`/api/prices?q=${encodeURIComponent(query)}`);
+      const params = new URLSearchParams({ q: query, category: snap.result.item.category });
+      if (snap.result.demo) params.set("demo", "1");
+      const res = await fetch(`/api/prices?${params}`);
       if (res.ok) {
-        const report: PriceReport = await res.json();
+        const report: PricesResponse = await res.json();
         setPrices(report);
-        remember({ ...snap, prices: report }); // save the prices with the snap
+        // A typed search has no store links yet, so it takes the ones that came with the prices.
+        const result = snap.result.typed ? { ...snap.result, links: report.links, affiliate: report.affiliate } : snap.result;
+        if (snap.result.typed) setResult(result);
+        remember({ ...snap, result, prices: report }); // save the prices with the snap
       }
     } finally {
       setPricesLoading(false);
     }
   }
 
+  // The "type it instead" search: skip the photo and the AI, go straight to prices.
+  // It's free to run, because it only uses the price sources.
+  const [typed, setTyped] = useState("");
+  function handleTyped(e: React.FormEvent) {
+    e.preventDefault(); // stop the browser from reloading the page (what forms do by default)
+    const q = typed.trim();
+    if (!q) return;
+    const item: Item = {
+      found: true, name: q, brand: "", category: "", confidence: "high",
+      description: "", priceLow: 0, priceHigh: 0, searchQuery: q,
+    };
+    const snap: Snap = { id: crypto.randomUUID(), at: Date.now(), thumb: "", result: { item, links: [], typed: true }, prices: null };
+    setResult(snap.result);
+    setPrices(null);
+    setPreview(null);
+    setError(null);
+    track("typed_search");
+    remember(snap);
+    loadPrices(q, snap);
+  }
+
   // Re-opens an old snap from history, no AI or price check needed.
   function openSnap(snap: Snap) {
-    setPreview(snap.thumb);
+    setPreview(snap.thumb || null);
     setResult(snap.result);
     setPrices(snap.prices);
     setError(null);
@@ -205,6 +232,18 @@ export default function Home() {
         <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
       </label>
 
+      {/* No camera handy, or no AI key yet? Type it instead. */}
+      <form className="typed" onSubmit={handleTyped}>
+        <input
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder="…or type it: Jordan 1 Chicago"
+          maxLength={200}
+          aria-label="Search for a product"
+        />
+        <button type="submit" disabled={!typed.trim() || pricesLoading}>Find</button>
+      </form>
+
       {result?.demo && (
         <p className="demo-banner">Demo mode: showing a sample result. Real recognition turns on once the AI key is added.</p>
       )}
@@ -222,11 +261,11 @@ export default function Home() {
       {item?.found && (
         <section className="card">
           <p className="category">
-            {item.category} · {item.confidence} confidence
+            {result?.typed ? "Your search" : `${item.category} · ${item.confidence} confidence`}
             {result?.cached && <span className="instant"> · ⚡ instant</span>}
           </p>
           <h2>{item.name}</h2>
-          <p className="desc">{item.description}</p>
+          {item.description && <p className="desc">{item.description}</p>}
           {item.priceHigh > 0 && (
             <p className="price">
               ${item.priceLow.toLocaleString()}
@@ -267,6 +306,9 @@ export default function Home() {
               </ul>
             </details>
           )}
+          {prices && !prices.configured && !pricesLoading && (
+            <p className="muted">Live price checks aren&apos;t switched on yet. Try the store links below.</p>
+          )}
           {prices?.configured && prices.offers.length === 0 && !pricesLoading && (
             <p className="muted">No live prices found. Try the store links below.</p>
           )}
@@ -301,7 +343,7 @@ export default function Home() {
               const best = snap.prices?.bestNew ?? snap.prices?.bestUsed;
               return (
                 <button key={snap.id} className="history-item" onClick={() => openSnap(snap)}>
-                  <img src={snap.thumb} alt="" />
+                  {snap.thumb ? <img src={snap.thumb} alt="" /> : <span className="history-typed">{snap.result.item.name.slice(0, 1).toUpperCase()}</span>}
                   <span className="history-name">{snap.result.item.name}</span>
                   {best && <span className="history-price">{money(best.total)}</span>}
                 </button>

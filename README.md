@@ -48,4 +48,5 @@ Run the tests with `npm test`.
 - [x] **Week 2:** live prices from Google Shopping and eBay, best new and used deal picker
 - [x] **Week 3:** instant repeat lookups (photo fingerprints and caching), snap history, share cards
 - [x] **Weeks 4–5:** affiliate links, usage analytics, rate limiting, demo mode, one-click deploy
+- [x] **Installable app (PWA)** and a type-it-in search that works without the AI
 - [ ] **Next:** go live, launch on TikTok, recognize different photos of the same product (image embeddings)

@@ -192,6 +192,26 @@ The **Deploy with Vercel** button in the README copies the project to Vercel, a 
 - **Continuous deployment**: new code goes live automatically.
 - **Environment variables**: secret settings (like keys) kept outside the code.
 
+## Installable app and type-it search
+
+### Installable: a real app icon, no app store (`app/manifest.ts`)
+
+The **manifest** is the app's ID card: its name, icon, colors, and "open me full screen." With it, phones offer **Add to Home Screen** (Android may say **Install app**), and SnapFind gets its own icon that opens without the browser bar, just like a store app. This kind of app is called a **PWA** (Progressive Web App).
+
+The icons are drawn by `scripts/make-icons.mjs` from a small SVG drawing (shapes described with code), resized into every size phones ask for. The "maskable" one has extra padding, because Android sometimes crops icons into circles.
+
+**Why not the Play Store yet?** Stores cost money ($25 once for Google, $99 a year for Apple) and days of review. A website link works for everyone today, and it's easier to share from a TikTok bio. If people love it, the same app can be wrapped for the stores later.
+
+### Type it instead
+
+The search box under the Snap button skips the photo and the AI and goes straight to price checks. That makes it **free to run**, since only the price sources are used. It reuses the same `/api/prices` door, which now also sends back store links. Typed searches show up in history with a letter instead of a photo.
+
+### New words
+
+- **PWA (Progressive Web App)**: a website that can be installed like an app.
+- **Manifest**: the file that tells phones an app's name, icon, and colors.
+- **SVG**: a picture described with code (shapes and lines), so it stays sharp at any size.
+
 ## What's honest about week 1
 
 The price is the AI's **estimate** of the typical price, not a live price from a store. That's why it says "typical price." Week 2 (above) adds **real live prices**. The AI's estimate is still shown as "typical price" next to them.
