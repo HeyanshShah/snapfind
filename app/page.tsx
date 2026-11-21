@@ -4,6 +4,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon, StoreBadge, money, ago } from "./ui";
 import { track } from "@vercel/analytics";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
@@ -46,31 +47,6 @@ function toDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-// Shows money nicely: 159.5 -> "$159.50", 160 -> "$160".
-function money(n: number): string {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
-}
-
-// One deal box: "Best new deal: $160 at Nike, free shipping".
-function DealCard({ label, offer }: { label: string; offer: Offer }) {
-  return (
-    <a
-      className="deal"
-      href={offer.url}
-      target="_blank"
-      rel="noopener noreferrer sponsored"
-      onClick={() => track("deal_click", { store: offer.store, total: offer.total })}
-    >
-      <span className="deal-label">{label}</span>
-      <span className="deal-price">{money(offer.total)}</span>
-      <span className="deal-store">
-        {offer.store}
-        {offer.shipping === 0 ? " · free shipping" : offer.shipping ? ` · incl. ${money(offer.shipping)} shipping` : " · shipping not listed"}
-      </span>
-    </a>
-  );
-}
-
 // Phone photos are huge (often 4000+ pixels wide). We shrink them to 1024 pixels before
 // sending. That makes uploads way faster, and the AI can still see plenty of detail.
 async function shrinkPhoto(file: File, maxSize = 1024): Promise<Blob> {
@@ -94,6 +70,7 @@ export default function Home() {
   const [prices, setPrices] = useState<PriceReport | null>(null); // live prices from stores
   const [pricesLoading, setPricesLoading] = useState(false);
   const [history, setHistory] = useState<Snap[]>([]);
+  const [showAll, setShowAll] = useState(false); // show every offer, or just the top few?
 
   // useEffect with [] runs once, right after the page first appears: open the notebook.
   useEffect(() => setHistory(loadHistory()), []);
@@ -132,8 +109,12 @@ export default function Home() {
   const [typed, setTyped] = useState("");
   function handleTyped(e: React.FormEvent) {
     e.preventDefault(); // stop the browser from reloading the page (what forms do by default)
-    const q = typed.trim();
+    search(typed);
+  }
+  function search(text: string) {
+    const q = text.trim();
     if (!q) return;
+    setTyped(q);
     const item: Item = {
       found: true, name: q, brand: "", category: "", confidence: "high",
       description: "", priceLow: 0, priceHigh: 0, searchQuery: q,
@@ -143,9 +124,19 @@ export default function Home() {
     setPrices(null);
     setPreview(null);
     setError(null);
+    setShowAll(false);
     track("typed_search");
     remember(snap);
     loadPrices(q, snap);
+  }
+
+  // The "back to start" button: clears the screen so you can look up something new.
+  function reset() {
+    setResult(null);
+    setPrices(null);
+    setPreview(null);
+    setError(null);
+    setTyped("");
   }
 
   // Re-opens an old snap from history, no AI or price check needed.
@@ -154,6 +145,7 @@ export default function Home() {
     setResult(snap.result);
     setPrices(snap.prices);
     setError(null);
+    setShowAll(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -190,6 +182,7 @@ export default function Home() {
     setResult(null);
     setError(null);
     setPrices(null);
+    setShowAll(false);
     setPreview(URL.createObjectURL(file));
     setLoading(true);
 
@@ -220,138 +213,253 @@ export default function Home() {
   }
 
   const item = result?.item;
+  const best = prices?.bestNew ?? prices?.bestUsed ?? null;
+  // The big picture next to the result: your photo, or else the first store's product photo.
+  const picture = preview ?? prices?.offers.find((o) => o.image)?.image ?? null;
+  const offers = prices?.offers ?? [];
+  const shownOffers = showAll ? offers : offers.slice(0, 6);
+  const home = !result && !loading && !error;
+
+  // Tells you what shipping costs, in words.
+  const shippingText = (o: Offer) =>
+    o.shipping === 0 ? "Free shipping" : o.shipping ? `Includes ${money(o.shipping)} shipping` : "Shipping not listed";
+
+  // One clickable store row in the offers list.
+  const offerRow = (o: Offer, i: number) => (
+    <li key={i}>
+      <a className="offer" href={o.url} target="_blank" rel="noopener noreferrer sponsored"
+        onClick={() => track("offer_click", { store: o.store, total: o.total })}>
+        <StoreBadge store={o.store} />
+        <span className="offer-text">
+          <span className="offer-store">{o.store}</span>
+          <span className="offer-title">{o.title}</span>
+        </span>
+        <span className="offer-tags">
+          {o.condition === "used" && <span className="pill">Used</span>}
+          {!o.trusted && <span className="pill warn">Unverified</span>}
+        </span>
+        <span className="offer-price">{money(o.total)}</span>
+      </a>
+    </li>
+  );
 
   return (
-    <main className="wrap">
-      <h1 className="logo">SnapFind</h1>
-      <p className="tagline">Point. Snap. Find out what it is and where to get it.</p>
+    <div className="page">
+      {/* The top bar: logo on the left. Tapping it goes back to the start. */}
+      <header className="topbar">
+        <button className="brand" onClick={reset} aria-label="SnapFind home">
+          <span className="brand-mark"><Icon name="search" size={18} /></span>
+          SnapFind
+        </button>
+        <span className="topbar-note">Free price checker</span>
+      </header>
 
-      {/* capture="environment" opens the back camera on phones. On a laptop it opens a file picker. */}
-      <label className="snap">
-        {loading ? "Looking..." : preview ? "Snap another" : "Snap something"}
-        <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
-      </label>
+      <main className={home ? "wrap home" : "wrap"}>
+        {home && (
+          <section className="hero">
+            <p className="eyebrow"><Icon name="spark" size={14} /> Snap it or type it</p>
+            <h1>Find anything.<br /><span className="grad">Pay less for it.</span></h1>
+            <p className="sub">Take a photo of sneakers, a gadget, a car, anything. We tell you what it is and which store has the best price.</p>
+          </section>
+        )}
 
-      {/* No camera handy, or no AI key yet? Type it instead. */}
-      <form className="typed" onSubmit={handleTyped}>
-        <input
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          placeholder="…or type it: Jordan 1 Chicago"
-          maxLength={200}
-          aria-label="Search for a product"
-        />
-        <button type="submit" disabled={!typed.trim() || pricesLoading}>Find</button>
-      </form>
-
-      {result?.demo && (
-        <p className="demo-banner">Demo mode: showing a sample result. Real recognition turns on once the AI key is added.</p>
-      )}
-
-      {preview && <img className="preview" src={preview} alt="Your photo" />}
-
-      {loading && <div className="spinner" aria-label="Loading" />}
-
-      {error && <p className="error">{error}</p>}
-
-      {result && !item?.found && (
-        <p className="error">Couldn&apos;t spot anything to buy in that photo. Try getting closer to the item.</p>
-      )}
-
-      {item?.found && (
-        <section className="card">
-          <p className="category">
-            {result?.typed ? "Your search" : `${item.category} · ${item.confidence} confidence`}
-            {result?.cached && <span className="instant"> · ⚡ instant</span>}
-          </p>
-          <h2>{item.name}</h2>
-          {item.description && <p className="desc">{item.description}</p>}
-          {item.priceHigh > 0 && (
-            <p className="price">
-              ${item.priceLow.toLocaleString()}
-              {item.priceHigh !== item.priceLow && <> – ${item.priceHigh.toLocaleString()}</>}
-              <span className="est"> typical price</span>
-            </p>
-          )}
-
-          {pricesLoading && <p className="muted">Checking prices at every store...</p>}
-
-          {prices?.bestNew && <DealCard label="Best new deal" offer={prices.bestNew} />}
-          {prices?.bestUsed && <DealCard label="Best used deal" offer={prices.bestUsed} />}
-          {prices?.savings ? (
-            <p className="muted">Saves you {money(prices.savings)} vs. the priciest store we found.</p>
-          ) : null}
-
-          {prices && prices.offers.length > 0 && (
-            <details className="offers">
-              <summary>All {prices.offers.length} offers from {prices.sourcesUsed.join(" + ")}</summary>
-              <ul>
-                {prices.offers.slice(0, 15).map((o, i) => (
-                  <li key={i}>
-                    <a
-                      href={o.url}
-                      target="_blank"
-                      rel="noopener noreferrer sponsored"
-                      onClick={() => track("offer_click", { store: o.store, total: o.total })}
-                    >
-                      <span>
-                        {o.store}
-                        {o.condition === "used" && <em> · used</em>}
-                        {!o.trusted && <em> · unverified seller</em>}
-                      </span>
-                      <strong>{money(o.total)}</strong>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-          {prices && !prices.configured && !pricesLoading && (
-            <p className="muted">Live price checks aren&apos;t switched on yet. Try the store links below.</p>
-          )}
-          {prices?.configured && prices.offers.length === 0 && !pricesLoading && (
-            <p className="muted">No live prices found. Try the store links below.</p>
-          )}
-
-          <div className="links">
-            {result!.links.map((l) => (
-              <a
-                key={l.store}
-                href={l.url}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
-                onClick={() => track("store_link_click", { store: l.store })}
-              >
-                {l.store} →
-              </a>
-            ))}
-          </div>
-
-          <button className="share" onClick={share} disabled={pricesLoading}>
-            Share this find
+        {/* The search bar: type here, or tap the camera to snap a photo. */}
+        <form className="searchbar" onSubmit={handleTyped}>
+          <span className="searchbar-icon"><Icon name="search" /></span>
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Search any product"
+            maxLength={200}
+            aria-label="Search for a product"
+          />
+          {/* capture="environment" opens the back camera on phones. On a laptop it opens a file picker. */}
+          <label className="icon-btn" title="Snap a photo" aria-label="Snap a photo">
+            <Icon name="camera" />
+            <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
+          </label>
+          <button type="submit" className="go" disabled={!typed.trim() || pricesLoading} aria-label="Search">
+            <Icon name="arrow" />
           </button>
-          {/* US law (the FTC) says you must tell people when links can earn you money. */}
-          {result?.affiliate && <p className="disclosure">SnapFind may earn a commission from purchases through these links.</p>}
-        </section>
-      )}
+        </form>
 
-      {history.length > 0 && (
-        <section className="history">
-          <h3>Your recent snaps</h3>
-          <div className="history-grid">
-            {history.map((snap) => {
-              const best = snap.prices?.bestNew ?? snap.prices?.bestUsed;
-              return (
-                <button key={snap.id} className="history-item" onClick={() => openSnap(snap)}>
-                  {snap.thumb ? <img src={snap.thumb} alt="" /> : <span className="history-typed">{snap.result.item.name.slice(0, 1).toUpperCase()}</span>}
-                  <span className="history-name">{snap.result.item.name}</span>
-                  {best && <span className="history-price">{money(best.total)}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-    </main>
+        {home && (
+          <>
+            <div className="chips">
+              <span className="chips-label">Try</span>
+              {["AirPods Pro 2", "PS5 Slim", "Jordan 1 Chicago", "Stanley Quencher"].map((q) => (
+                <button key={q} className="chip" onClick={() => search(q)}>{q}</button>
+              ))}
+            </div>
+            <label className="snap-big">
+              <Icon name="camera" size={22} />
+              Snap a photo
+              <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
+            </label>
+            <ol className="steps">
+              <li><b>1</b><span><strong>Snap or search</strong>Photo or name, either works.</span></li>
+              <li><b>2</b><span><strong>We identify it</strong>The exact product and its typical price.</span></li>
+              <li><b>3</b><span><strong>Pay the least</strong>Every store compared, best deal on top.</span></li>
+            </ol>
+          </>
+        )}
+
+        {result?.demo && (
+          <p className="banner">Demo mode: this is a sample result. Real recognition turns on once the AI key is added.</p>
+        )}
+
+        {/* While the AI looks at the photo, show grey "skeleton" shapes instead of a spinner. */}
+        {loading && (
+          <section className="result">
+            <div className="media">{preview && <img src={preview} alt="Your photo" />}<span className="scan" /></div>
+            <div className="info">
+              <p className="eyebrow">Looking at your photo…</p>
+              <div className="sk sk-title" />
+              <div className="sk sk-line" />
+              <div className="sk sk-line short" />
+            </div>
+          </section>
+        )}
+
+        {error && <p className="banner error">{error}</p>}
+
+        {result && !item?.found && (
+          <section className="result">
+            {preview && <div className="media"><img src={preview} alt="Your photo" /></div>}
+            <div className="info">
+              <h2>Couldn&apos;t spot anything to buy</h2>
+              <p className="desc">Try getting closer to the item, or type its name in the search bar.</p>
+            </div>
+          </section>
+        )}
+
+        {item?.found && (
+          <>
+            {/* A typed search with no product photo yet skips the big picture box. */}
+            <section className={picture || !result?.typed ? "result" : "result solo"}>
+              {(picture || !result?.typed) && (
+                <div className="media">
+                  {picture ? <img src={picture} alt={item.name} /> : <span className="monogram"><span className="grad">{item.name.slice(0, 1).toUpperCase()}</span></span>}
+                </div>
+              )}
+              <div className="info">
+                <p className="eyebrow">
+                  {result?.typed ? "Your search" : item.category}
+                  {!result?.typed && <span className="dot">{item.confidence} confidence</span>}
+                  {result?.cached && <span className="instant"><Icon name="bolt" size={12} /> Instant</span>}
+                </p>
+                <h2>{item.name}</h2>
+                {item.description && <p className="desc">{item.description}</p>}
+                <div className="facts">
+                  {item.priceHigh > 0 && (
+                    <span className="fact">
+                      <small>Typical price</small>
+                      {money(item.priceLow)}{item.priceHigh !== item.priceLow && <> – {money(item.priceHigh)}</>}
+                    </span>
+                  )}
+                  {offers.length > 0 && (
+                    <span className="fact"><small>Offers found</small>{offers.length}</span>
+                  )}
+                  {prices?.savings ? (
+                    <span className="fact good"><small>You save up to</small>{money(prices.savings)}</span>
+                  ) : null}
+                </div>
+                <div className="actions">
+                  <button className="ghost" onClick={share} disabled={pricesLoading}><Icon name="share" size={16} /> Share</button>
+                  <button className="ghost" onClick={reset}><Icon name="back" size={16} /> New search</button>
+                </div>
+              </div>
+            </section>
+
+            {pricesLoading && (
+              <section className="panel">
+                <p className="panel-title">Checking prices at every store…</p>
+                <div className="sk sk-deal" />
+                <div className="sk sk-row" /><div className="sk sk-row" /><div className="sk sk-row" />
+              </section>
+            )}
+
+            {/* The winner: the cheapest store we trust. */}
+            {best && !pricesLoading && (
+              <section className="deal-grid">
+                {[prices?.bestNew && { label: "Best new price", o: prices.bestNew }, prices?.bestUsed && { label: "Best used price", o: prices.bestUsed }]
+                  .filter((d): d is { label: string; o: Offer } => Boolean(d))
+                  .map(({ label, o }, i) => (
+                    <a key={label} className={i === 0 ? "deal top" : "deal"} href={o.url} target="_blank" rel="noopener noreferrer sponsored"
+                      onClick={() => track("deal_click", { store: o.store, total: o.total })}>
+                      <span className="deal-label"><Icon name="tag" size={14} /> {label}</span>
+                      <span className="deal-price">{money(o.total)}</span>
+                      <span className="deal-store"><StoreBadge store={o.store} size={24} /> {o.store} · {shippingText(o)}</span>
+                      <span className="deal-cta">Go to store <Icon name="external" size={15} /></span>
+                    </a>
+                  ))}
+              </section>
+            )}
+
+            {offers.length > 0 && !pricesLoading && (
+              <section className="panel">
+                <p className="panel-title">
+                  All prices <span className="muted">from {prices!.sourcesUsed.join(" + ")}, cheapest first</span>
+                </p>
+                <ul className="offers">{shownOffers.map(offerRow)}</ul>
+                {offers.length > 6 && (
+                  <button className="more" onClick={() => setShowAll(!showAll)}>
+                    {showAll ? "Show fewer" : `Show all ${offers.length} offers`}
+                  </button>
+                )}
+              </section>
+            )}
+
+            {/* Store buttons: search the item on each store's own site. */}
+            {result!.links.length > 0 && !pricesLoading && (
+              <section className="panel">
+                <p className="panel-title">
+                  {prices && !prices.configured
+                    ? "Compare it yourself"
+                    : prices?.configured && offers.length === 0
+                      ? "No live prices found. Check these stores"
+                      : "Search other stores"}
+                </p>
+                {prices && !prices.configured && (
+                  <p className="muted small">Live price comparison is coming soon. For now, jump straight to the search on each store.</p>
+                )}
+                <div className="stores">
+                  {result!.links.map((l) => (
+                    <a key={l.store} className="store" href={l.url} target="_blank" rel="noopener noreferrer sponsored"
+                      onClick={() => track("store_link_click", { store: l.store })}>
+                      <StoreBadge store={l.store} size={32} />
+                      <span>{l.store}</span>
+                      <Icon name="external" size={15} />
+                    </a>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* US law (the FTC) says you must tell people when links can earn you money. */}
+            {result?.affiliate && <p className="disclosure">SnapFind may earn a commission from purchases through these links.</p>}
+          </>
+        )}
+
+        {history.length > 0 && (
+          <section className="history">
+            <p className="panel-title">Recent</p>
+            <div className="history-row">
+              {history.map((snap) => {
+                const top = snap.prices?.bestNew ?? snap.prices?.bestUsed;
+                return (
+                  <button key={snap.id} className="history-item" onClick={() => openSnap(snap)}>
+                    {snap.thumb ? <img src={snap.thumb} alt="" /> : <span className="monogram small"><span className="grad">{snap.result.item.name.slice(0, 1).toUpperCase()}</span></span>}
+                    <span className="history-name">{snap.result.item.name}</span>
+                    <span className="history-meta">{top ? money(top.total) : ago(snap.at)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+      </main>
+      <footer className="foot">SnapFind · prices change often, always check the store before buying</footer>
+    </div>
   );
 }

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 // Makes the app fit phone screens properly instead of looking zoomed out.
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0b0b0f" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#08080c" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

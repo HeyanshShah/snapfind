@@ -240,3 +240,14 @@ SnapFind can now use **two different AIs**, and picks one by itself:
 ## What's honest about week 1
 
 The price is the AI's **estimate** of the typical price, not a live price from a store. That's why it says "typical price." Week 2 (above) adds **real live prices**. The AI's estimate is still shown as "typical price" next to them.
+
+## The new look (app/page.tsx, app/ui.tsx, app/globals.css)
+
+The first version worked but looked like a school project. So we gave it a makeover:
+
+- **One search bar does everything.** Type a product, or tap the camera button inside the bar to snap a photo.
+- **Example buttons** ("AirPods Pro 2", "PS5 Slim"...) so a new visitor can try it in one tap.
+- **Skeletons instead of a spinner.** While we wait, grey shapes shimmer where the answer will appear. It feels faster, because your eyes already know where to look.
+- **The best price is the biggest thing on the screen**, with a "Go to store" button right under it. That's the whole point of the app, so it gets the spotlight.
+- **app/ui.tsx** holds the little reusable pieces: icons (drawn with SVG code, no image files), the colored store badges (the same store always gets the same color), and helpers like `money()` and `ago()` ("5 min ago").
+- **globals.css** keeps every color as a named "token" at the top (like `--accent`). Change one line there and the whole app changes color. The `@media (max-width: 640px)` part is the phone layout: same content, stacked in one column.
