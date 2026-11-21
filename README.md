@@ -8,14 +8,14 @@ New to the code? Start with **[LEARN.md](LEARN.md)**, which explains every file 
 
 ## Put it online (free)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FHeyanshShah%2Fsnapfind&env=ANTHROPIC_API_KEY&envDescription=Key%20for%20the%20photo%20recognition%20AI&envLink=https%3A%2F%2Fconsole.anthropic.com)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FHeyanshShah%2Fsnapfind&env=GEMINI_API_KEY&envDescription=Free%20key%20for%20the%20photo%20recognition%20AI&envLink=https%3A%2F%2Faistudio.google.com)
 
 Click the button, sign in with GitHub, paste your keys, and click Deploy. Without an AI key the app runs in **demo mode** and shows clearly labeled sample results. You can add more keys later under Project → Settings → Environment Variables (see `.env.example` for the full list).
 
 ## Run it on your computer
 
 1. Install [Node.js](https://nodejs.org) (version 20 or newer).
-2. Get an Anthropic API key at [console.anthropic.com](https://console.anthropic.com).
+2. Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com) (no credit card).
 3. In this folder, run:
 
    ```bash

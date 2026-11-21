@@ -8,8 +8,9 @@ import type { PriceReport } from "./prices/index.ts";
 import { compareOffers } from "./prices/bestDeal.ts";
 import type { Offer } from "./prices/types.ts";
 
+// Demo mode = no AI key of either kind is set up.
 export function demoMode(): boolean {
-  return !process.env.ANTHROPIC_API_KEY;
+  return !process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY;
 }
 
 export const DEMO_ITEM: Item = {

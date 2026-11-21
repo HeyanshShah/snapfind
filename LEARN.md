@@ -212,6 +212,31 @@ The search box under the Snap button skips the photo and the AI and goes straigh
 - **Manifest**: the file that tells phones an app's name, icon, and colors.
 - **SVG**: a picture described with code (shapes and lines), so it stays sharp at any size.
 
+## Switching to a free AI (Gemini)
+
+SnapFind can now use **two different AIs**, and picks one by itself:
+
+1. `GEMINI_API_KEY` set? It uses **Google Gemini**, which has a free tier with no credit card.
+2. `ANTHROPIC_API_KEY` set? It uses Anthropic's model, the paid option at about a cent per photo.
+3. Neither? Demo mode.
+
+**How the swap works without breaking anything:** both AIs fill in the exact same answer form (`lib/item.ts`). `lib/identify.ts` is a **switchboard**: it looks at which key exists and calls `lib/ai/gemini.ts` or `lib/ai/anthropic.ts`. Everything else in the app (prices, history, share cards) never knows or cares which AI answered. Writing code this way is called an **abstraction**, or a "provider interface." It's a classic interview topic: "how would you switch vendors without rewriting your app?"
+
+**Inside `gemini.ts`:**
+- `z.toJSONSchema(ItemSchema)` turns our form into **JSON Schema**, the standard format Gemini understands, so Gemini answers only in that shape.
+- `ItemSchema.safeParse(...)` double-checks the answer anyway. Never fully trust data from outside your app.
+- `gemini-flash-latest` always points to Google's newest fast model, so the app doesn't break when they retire an old one.
+
+**`lib/ai/errors.ts`:** each company reports problems differently, so we translate them into two errors of our own: `AiBusyError` (too many requests, like hitting the free daily limit) and `AiKeyError` (bad key). The server route only has to handle those two.
+
+**Free-tier trade-offs, honestly:** there are per-minute and per-day limits, and on the free tier Google may use what's sent to improve its models. Fine for building and an early launch. If it takes off, switch to a paid key.
+
+### New words
+
+- **Abstraction / provider interface**: one simple doorway in front of several different services.
+- **JSON Schema**: a standard way to describe the shape of data.
+- **Validation**: checking data is in the shape you expect before using it.
+
 ## What's honest about week 1
 
 The price is the AI's **estimate** of the typical price, not a live price from a store. That's why it says "typical price." Week 2 (above) adds **real live prices**. The AI's estimate is still shown as "typical price" next to them.

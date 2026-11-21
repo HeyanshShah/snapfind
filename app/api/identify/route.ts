@@ -5,8 +5,7 @@
 // API key on the phone, and anyone could steal it. The server keeps it hidden.
 
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
-import { identifyItem } from "@/lib/identify";
+import { identifyItem, AiBusyError, AiKeyError } from "@/lib/identify";
 import { buildShopLinks } from "@/lib/shopLinks";
 import { dHash } from "@/lib/imageHash";
 import { identifyCache, findSimilar } from "@/lib/memory";
@@ -80,10 +79,10 @@ export async function POST(request: Request) {
     const links = item.found ? buildShopLinks(item.searchQuery, item.category) : [];
     return NextResponse.json({ item, links, cached: false, affiliate: affiliatesOn() });
   } catch (err) {
-    if (err instanceof Anthropic.RateLimitError) {
-      return NextResponse.json({ error: "Too many people at once. Try again in a few seconds." }, { status: 429 });
+    if (err instanceof AiBusyError) {
+      return NextResponse.json({ error: "The AI is busy (free limit reached). Try again in a minute, or use the search box." }, { status: 429 });
     }
-    if (err instanceof Anthropic.AuthenticationError) {
+    if (err instanceof AiKeyError) {
       return NextResponse.json({ error: "The server's AI key is missing or wrong." }, { status: 500 });
     }
     console.error(err);
