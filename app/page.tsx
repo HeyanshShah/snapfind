@@ -3,13 +3,14 @@
 // (in their browser), so it can open the camera and react when they tap buttons.
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon, StoreBadge, money, ago } from "./ui";
 import { track } from "@vercel/analytics";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
 import type { PriceReport } from "@/lib/prices/index";
 import type { Offer } from "@/lib/prices/types";
+import { newWatch, updateWatch, needsCheck, dropAmount, sameItem, WATCH_MAX, type Watch } from "@/lib/watch";
 
 type Result = { item: Item; links: ShopLink[]; cached?: boolean; demo?: boolean; affiliate?: boolean; typed?: boolean };
 type PricesResponse = PriceReport & { links: ShopLink[]; affiliate: boolean };
@@ -21,6 +22,33 @@ type Snap = { id: string; at: number; thumb: string; result: Result; prices: Pri
 // account and no server. It's like a notebook that stays in your browser.
 const HISTORY_KEY = "snapfind-history";
 const HISTORY_MAX = 20;
+
+// The watch list lives in browser storage too, in its own notebook.
+const WATCH_KEY = "snapfind-watch";
+function loadWatches(): Watch[] {
+  try {
+    return JSON.parse(localStorage.getItem(WATCH_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+function saveWatches(list: Watch[]) {
+  try {
+    localStorage.setItem(WATCH_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+// Asks our server for today's prices. Returns null if anything goes wrong.
+async function fetchPrices(query: string, category: string, demo: boolean): Promise<PriceReport | null> {
+  const params = new URLSearchParams({ q: query, category });
+  if (demo) params.set("demo", "1");
+  try {
+    const res = await fetch(`/api/prices?${params}`);
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
 
 function loadHistory(): Snap[] {
   try {
@@ -71,9 +99,60 @@ export default function Home() {
   const [pricesLoading, setPricesLoading] = useState(false);
   const [history, setHistory] = useState<Snap[]>([]);
   const [showAll, setShowAll] = useState(false); // show every offer, or just the top few?
+  const [thumb, setThumb] = useState(""); // tiny photo of what's on screen (for the watch list)
+  const [watches, setWatches] = useState<Watch[]>([]);
+  const [drops, setDrops] = useState<Watch[]>([]); // items that got cheaper since last visit
+  const checkedOnce = useRef(false); // so we only re-check the watch list once per visit
 
   // useEffect with [] runs once, right after the page first appears: open the notebook.
   useEffect(() => setHistory(loadHistory()), []);
+
+  // Open the watch list, then quietly re-check prices for anything not checked in 6 hours.
+  useEffect(() => {
+    const list = loadWatches();
+    setWatches(list);
+    if (checkedOnce.current) return;
+    checkedOnce.current = true;
+    (async () => {
+      const found: Watch[] = [];
+      // One at a time (not all at once), to go easy on the price sources.
+      for (const w of list.filter((w) => needsCheck(w, Date.now()))) {
+        const report = await fetchPrices(w.query, w.category, w.demo);
+        if (!report) continue;
+        const before = w.price;
+        const fresh = updateWatch(w, report, Date.now());
+        changeWatches((all) => all.map((x) => (x.id === w.id ? fresh : x)));
+        if (before !== null && fresh.price !== null && fresh.price < before) found.push(fresh);
+      }
+      if (found.length) {
+        setDrops(found);
+        track("price_drop_seen", { count: found.length });
+      }
+    })();
+  }, []);
+
+  // Changes the watch list, on screen and in storage.
+  function changeWatches(fn: (old: Watch[]) => Watch[]) {
+    setWatches((old) => {
+      const next = fn(old);
+      saveWatches(next);
+      return next;
+    });
+  }
+
+  // The "Watch price" button: start watching what's on screen, or stop if already watching.
+  function toggleWatch() {
+    if (!result) return;
+    const item = result.item;
+    if (watches.some((w) => sameItem(w, item.searchQuery))) {
+      changeWatches((all) => all.filter((w) => !sameItem(w, item.searchQuery)));
+      track("watch_remove");
+      return;
+    }
+    const w = newWatch(item, prices, { id: crypto.randomUUID(), thumb, demo: Boolean(result.demo), now: Date.now() });
+    changeWatches((all) => [w, ...all].slice(0, WATCH_MAX));
+    track("watch_add", { item: item.name });
+  }
 
   // Adds or updates one snap in the history (newest first), on screen and in storage.
   function remember(snap: Snap) {
@@ -98,6 +177,8 @@ export default function Home() {
         const result = snap.result.typed ? { ...snap.result, links: report.links, affiliate: report.affiliate } : snap.result;
         if (snap.result.typed) setResult(result);
         remember({ ...snap, result, prices: report }); // save the prices with the snap
+        // Watching this item? These are fresh prices, so update the watch for free.
+        changeWatches((all) => all.map((w) => (sameItem(w, query) ? updateWatch(w, report, Date.now()) : w)));
       }
     } finally {
       setPricesLoading(false);
@@ -120,6 +201,7 @@ export default function Home() {
       description: "", priceLow: 0, priceHigh: 0, searchQuery: q,
     };
     const snap: Snap = { id: crypto.randomUUID(), at: Date.now(), thumb: "", result: { item, links: [], typed: true }, prices: null };
+    setThumb("");
     setResult(snap.result);
     setPrices(null);
     setPreview(null);
@@ -142,6 +224,7 @@ export default function Home() {
   // Re-opens an old snap from history, no AI or price check needed.
   function openSnap(snap: Snap) {
     setPreview(snap.thumb || null);
+    setThumb(snap.thumb);
     setResult(snap.result);
     setPrices(snap.prices);
     setError(null);
@@ -200,6 +283,7 @@ export default function Home() {
       if (data.item.found) {
         // Save it to history with a tiny 160px thumbnail (big photos would fill up storage).
         const snap: Snap = { id: crypto.randomUUID(), at: Date.now(), thumb: await toDataUrl(await shrinkPhoto(file, 160)), result: data, prices: null };
+        setThumb(snap.thumb);
         remember(snap);
         // Show the item right away, then fetch prices in the background (no "await" here).
         loadPrices(data.item.searchQuery, snap);
@@ -219,6 +303,7 @@ export default function Home() {
   const offers = prices?.offers ?? [];
   const shownOffers = showAll ? offers : offers.slice(0, 6);
   const home = !result && !loading && !error;
+  const watching = Boolean(item && watches.some((w) => sameItem(w, item.searchQuery)));
 
   // Tells you what shipping costs, in words.
   const shippingText = (o: Offer) =>
@@ -282,6 +367,15 @@ export default function Home() {
             <Icon name="arrow" />
           </button>
         </form>
+
+        {/* "Price drop!" news from the check we did when you opened the app. */}
+        {home && drops.map((w) => (
+          <a key={w.id} className="drop" href={w.url ?? "#"} target="_blank" rel="noopener noreferrer sponsored"
+            onClick={() => track("deal_click", { store: w.store ?? "", total: w.price ?? 0, from: "drop" })}>
+            <Icon name="bell" size={18} />
+            <span><strong>Price drop!</strong> {w.name} is now {money(w.price!)} at {w.store}.</span>
+          </a>
+        ))}
 
         {home && (
           <>
@@ -365,6 +459,9 @@ export default function Home() {
                   ) : null}
                 </div>
                 <div className="actions">
+                  <button className={watching ? "ghost on" : "ghost"} onClick={toggleWatch} aria-pressed={watching}>
+                    <Icon name="bell" size={16} /> {watching ? "Watching price" : "Watch price"}
+                  </button>
                   <button className="ghost" onClick={share} disabled={pricesLoading}><Icon name="share" size={16} /> Share</button>
                   <button className="ghost" onClick={reset}><Icon name="back" size={16} /> New search</button>
                 </div>
@@ -439,6 +536,30 @@ export default function Home() {
             {/* US law (the FTC) says you must tell people when links can earn you money. */}
             {result?.affiliate && <p className="disclosure">SnapFind may earn a commission from purchases through these links.</p>}
           </>
+        )}
+
+        {watches.length > 0 && (
+          <section className="history watching">
+            <p className="panel-title">Watching <span className="muted">· we re-check prices every time you open SnapFind</span></p>
+            <div className="history-row">
+              {watches.map((w) => {
+                const drop = dropAmount(w);
+                return (
+                  <div key={w.id} className="history-item watch">
+                    <button className="watch-open" onClick={() => search(w.query)} aria-label={`Check ${w.name} again`}>
+                      {w.thumb ? <img src={w.thumb} alt="" /> : <span className="monogram small"><span className="grad">{w.name.slice(0, 1).toUpperCase()}</span></span>}
+                      <span className="history-name">{w.name}</span>
+                      <span className="history-meta">
+                        {w.price !== null ? money(w.price) : "No price yet"}
+                        {drop > 0 && <span className="down"> ↓ {money(drop)}</span>}
+                      </span>
+                    </button>
+                    <button className="unwatch" onClick={() => changeWatches((all) => all.filter((x) => x.id !== w.id))} aria-label={`Stop watching ${w.name}`}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {history.length > 0 && (

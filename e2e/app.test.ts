@@ -94,3 +94,34 @@ test("New search goes back to the home screen", async () => {
   assert.equal(await page.inputValue(".searchbar input"), "");
   await page.close();
 });
+
+test("Watch price adds the item to Watching, it survives a reload, and × removes it", async () => {
+  const page = await visit();
+  await page.click(".chip >> text=Jordan 1 Chicago");
+  await page.waitForSelector(".store");
+  await page.click("text=Watch price");
+  assert.equal(await page.textContent("[aria-pressed=true]"), " Watching price");
+  await page.reload(); // back on the home screen, the watch list is still there
+  assert.equal(await page.textContent(".watching .history-name"), "Jordan 1 Chicago");
+  await page.click(".unwatch");
+  assert.equal(await page.locator(".watching").count(), 0);
+  await page.close();
+});
+
+test("a cheaper price on the next visit shows a Price drop banner", async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  // Pretend we started watching yesterday at $999 and haven't checked since.
+  // Demo mode answers with sample prices (well under $999), so it should count as a drop.
+  await page.addInitScript(() => {
+    if (localStorage.getItem("snapfind-watch")) return; // only seed on the first load
+    localStorage.setItem("snapfind-watch", JSON.stringify([{
+      id: "w1", name: "Sample sneaker", query: "Air Jordan 1 Chicago", category: "sneakers", thumb: "", demo: true,
+      addedAt: 0, startPrice: 999, price: 999, store: "Old store", url: "https://example.com", lowest: 999, checkedAt: 0,
+    }]));
+  });
+  await page.goto(URL);
+  await page.waitForSelector(".drop");
+  assert.match(await page.textContent(".drop") ?? "", /Price drop! Sample sneaker is now \$\d+/);
+  assert.match(await page.textContent(".watching .down") ?? "", /↓ \$\d+/);
+  await page.close();
+});

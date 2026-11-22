@@ -226,6 +226,23 @@ img { display: block; }
 
 .foot { text-align: center; padding: 20px 16px 28px; font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); }
 
+/* ---------- Watch list ---------- */
+.ghost.on { border-color: rgba(61, 220, 151, 0.5); color: var(--good); background: rgba(61, 220, 151, 0.08); }
+.drop {
+  display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 14px 16px; border-radius: 16px;
+  background: rgba(61, 220, 151, 0.1); border: 1px solid rgba(61, 220, 151, 0.35); color: var(--good); text-decoration: none;
+}
+.drop span { color: var(--text); }
+.drop strong { color: var(--good); }
+.watch { position: relative; padding: 0; }
+.watch-open { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 8px; border: 0; background: none; text-align: left; min-width: 0; }
+.down { color: var(--good); font-weight: 700; }
+.unwatch {
+  position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 50%;
+  border: 0; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 16px; line-height: 1;
+}
+.watching + .history { margin-top: 24px; }
+
 /* ---------- Phones ---------- */
 @media (max-width: 640px) {
   .wrap.home { padding-top: 32px; }

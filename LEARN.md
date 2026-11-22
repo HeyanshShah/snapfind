@@ -257,3 +257,12 @@ The first version worked but looked like a school project. So we gave it a makeo
 **e2e/app.test.ts** is a robot user. It starts the real app, opens an invisible browser (Playwright), and does what a person would: types "PS5 Slim", taps an example search, uploads a photo, reloads the page to check Recent was saved. It runs with no keys (demo mode), so it never costs money. Run it yourself with `npm run build && npm run e2e`.
 
 **.github/workflows/ci.yml** tells GitHub: "every time code is pushed to main, borrow a fresh computer and run every check." That's typecheck, the logic tests, the build, and the robot tests. You'll see a green check (all good) or a red X (something broke) next to each commit on GitHub. This is called **CI (Continuous Integration)**, and together with Vercel auto-deploying it's called **CI/CD**. Interview line: *"Every push runs type checks, unit tests, and Playwright end-to-end tests in GitHub Actions, then auto-deploys to Vercel."*
+
+## Price-drop alerts (lib/watch.ts, the "Watch price" button)
+
+Tap **Watch price** on any result and SnapFind writes down today's best price. Every time you open the app, it quietly checks the price again (at most every 6 hours per item, one item at a time so we don't hammer the stores). If it got cheaper, you get a green **Price drop!** banner, and the item's card in **Watching** shows how much it fell (like "↓ $30").
+
+- **lib/watch.ts** is only rules: make a watch, update it with new prices, decide if it's time to re-check, work out the drop. No screen and no internet, so it's easy to test (lib/watch.test.ts).
+- If a price check fails (a store is down), we keep the old price instead of pretending it vanished.
+- The list is saved in your browser (localStorage), like Recent. No account needed.
+- **Limit for now:** the check happens when you *open* the app. Alerts while the app is closed need push notifications plus a small database and a timer on the server. That's the next upgrade.
