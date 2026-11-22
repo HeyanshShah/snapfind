@@ -1,0 +1,28 @@
+# .github/workflows/ci.yml
+# "CI" = Continuous Integration. Every time code is pushed, GitHub borrows a fresh computer,
+# downloads the code, and checks that nothing is broken. A green check mark on GitHub means
+# all of these passed; a red X means something broke (and GitHub emails you).
+
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4          # download the code
+      - uses: actions/setup-node@v4        # install Node.js
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci                        # install the exact packages from package-lock.json
+      - run: npm run typecheck             # does all the TypeScript make sense?
+      - run: npm test                      # the logic tests (prices, caching, limits)
+      - run: npm run build                 # can the app be built for the internet?
+      - run: npx playwright install --with-deps chromium   # get the invisible browser
+      - run: npm run e2e                   # robot clicks through the real app

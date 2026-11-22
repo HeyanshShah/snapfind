@@ -40,7 +40,7 @@ Without these keys the app still works, it just shows store links instead of liv
 
 Once set, buy links earn a commission and the app shows the required disclosure.
 
-Run the tests with `npm test`.
+Run the tests with `npm test`, and the browser tests with `npm run build && npm run e2e`. GitHub runs all of them on every push.
 
 ## Roadmap
 
