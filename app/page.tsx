@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon, StoreBadge, money, ago } from "./ui";
+import { Scramble, useTypingHint, CountUp, useTilt, useSpotlight, ScanLog, Viewfinder } from "./fx";
 import { track } from "@vercel/analytics";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
@@ -75,6 +76,23 @@ function toDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+// Product ideas the search box "types" by itself on the home screen.
+const HINTS = ["AirPods Pro 2", "Jordan 1 Chicago", "PS5 Slim", "Stanley Quencher", "Dyson Airwrap", "Nintendo Switch 2"];
+
+// One best-deal card. It tilts toward your mouse, and the price rolls up when it appears.
+function DealCard({ label, offer, top, shipping }: { label: string; offer: Offer; top: boolean; shipping: string }) {
+  const ref = useTilt<HTMLAnchorElement>();
+  return (
+    <a ref={ref} className={top ? "deal spot top" : "deal spot"} href={offer.url} target="_blank" rel="noopener noreferrer sponsored"
+      onClick={() => track("deal_click", { store: offer.store, total: offer.total })}>
+      <span className="deal-label mono"><Icon name="tag" size={14} /> {label}</span>
+      <span className="deal-price mono"><CountUp value={offer.total} format={money} /></span>
+      <span className="deal-store"><StoreBadge store={offer.store} size={24} /> {offer.store} · {shipping}</span>
+      <span className="deal-cta">Go to store <Icon name="external" size={15} /></span>
+    </a>
+  );
+}
+
 // Phone photos are huge (often 4000+ pixels wide). We shrink them to 1024 pixels before
 // sending. That makes uploads way faster, and the AI can still see plenty of detail.
 async function shrinkPhoto(file: File, maxSize = 1024): Promise<Blob> {
@@ -103,6 +121,22 @@ export default function Home() {
   const [watches, setWatches] = useState<Watch[]>([]);
   const [drops, setDrops] = useState<Watch[]>([]); // items that got cheaper since last visit
   const checkedOnce = useRef(false); // so we only re-check the watch list once per visit
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false); // is a photo being dragged over the page?
+  useSpotlight();
+
+  // Keyboard shortcut: press "/" or Ctrl/Cmd+K anywhere to jump into the search box.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const typing = (e.target as HTMLElement)?.tagName === "INPUT";
+      if ((e.key === "/" && !typing) || (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
 
   // useEffect with [] runs once, right after the page first appears: open the notebook.
   useEffect(() => setHistory(loadHistory()), []);
@@ -258,9 +292,16 @@ export default function Home() {
   }
 
   // Runs when the user picks or takes a photo.
-  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  // The camera button (or file picker) hands us a photo here.
+  function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    e.target.value = ""; // lets the user pick the same photo again
+    if (file) processFile(file);
+  }
+
+  // Runs for every new photo: from the camera, the file picker, or one dragged onto the page.
+  async function processFile(file: File) {
+    if (loading) return;
 
     setResult(null);
     setError(null);
@@ -291,8 +332,7 @@ export default function Home() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
-      setLoading(false); // stop the spinner no matter what happened
-      e.target.value = ""; // lets the user pick the same photo again
+      setLoading(false); // stop the loading screen no matter what happened
     }
   }
 
@@ -303,6 +343,7 @@ export default function Home() {
   const offers = prices?.offers ?? [];
   const shownOffers = showAll ? offers : offers.slice(0, 6);
   const home = !result && !loading && !error;
+  const hint = useTypingHint(HINTS, home && !typed);
   const watching = Boolean(item && watches.some((w) => sameItem(w, item.searchQuery)));
 
   // Tells you what shipping costs, in words.
@@ -329,21 +370,30 @@ export default function Home() {
   );
 
   return (
-    <div className="page">
+    <div className="page"
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={(e) => { if (!e.relatedTarget) setDragging(false); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f?.type.startsWith("image/")) processFile(f);
+      }}>
+      {dragging && !home && <div className="drop-overlay mono">Drop to scan</div>}
       {/* The top bar: logo on the left. Tapping it goes back to the start. */}
       <header className="topbar">
         <button className="brand" onClick={reset} aria-label="SnapFind home">
           <span className="brand-mark"><Icon name="search" size={18} /></span>
           SnapFind
         </button>
-        <span className="topbar-note">Free price checker</span>
+        <span className="topbar-note mono"><span className="dot-live" /> System online</span>
       </header>
 
       <main className={home ? "wrap home" : "wrap"}>
         {home && (
           <section className="hero">
-            <p className="eyebrow"><Icon name="spark" size={14} /> Snap it or type it</p>
-            <h1>Find anything.<br /><span className="grad">Pay less for it.</span></h1>
+            <p className="eyebrow mono"><Icon name="spark" size={14} /> Visual search engine v2</p>
+            <h1><Scramble text="Find anything." /><br /><Scramble className="grad" text="Pay less for it." /></h1>
             <p className="sub">Take a photo of sneakers, a gadget, a car, anything. We tell you what it is and which store has the best price.</p>
           </section>
         )}
@@ -352,9 +402,10 @@ export default function Home() {
         <form className="searchbar" onSubmit={handleTyped}>
           <span className="searchbar-icon"><Icon name="search" /></span>
           <input
+            ref={searchRef}
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
-            placeholder="Search any product"
+            placeholder={home ? `Try "${hint}"` : "Search any product"}
             maxLength={200}
             aria-label="Search for a product"
           />
@@ -363,6 +414,7 @@ export default function Home() {
             <Icon name="camera" />
             <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
           </label>
+          <kbd className="kbd mono" aria-hidden="true">/</kbd>
           <button type="submit" className="go" disabled={!typed.trim() || pricesLoading} aria-label="Search">
             <Icon name="arrow" />
           </button>
@@ -385,15 +437,11 @@ export default function Home() {
                 <button key={q} className="chip" onClick={() => search(q)}>{q}</button>
               ))}
             </div>
-            <label className="snap-big">
-              <Icon name="camera" size={22} />
-              Snap a photo
-              <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
-            </label>
+            <Viewfinder onFile={processFile} disabled={loading} />
             <ol className="steps">
-              <li><b>1</b><span><strong>Snap or search</strong>Photo or name, either works.</span></li>
-              <li><b>2</b><span><strong>We identify it</strong>The exact product and its typical price.</span></li>
-              <li><b>3</b><span><strong>Pay the least</strong>Every store compared, best deal on top.</span></li>
+              <li className="spot"><b className="mono">01</b><span><strong>Snap or search</strong>Photo or name, either works.</span></li>
+              <li className="spot"><b className="mono">02</b><span><strong>AI identifies it</strong>The exact product and its typical price.</span></li>
+              <li className="spot"><b className="mono">03</b><span><strong>Pay the least</strong>Every store compared, best deal on top.</span></li>
             </ol>
           </>
         )}
@@ -404,13 +452,11 @@ export default function Home() {
 
         {/* While the AI looks at the photo, show grey "skeleton" shapes instead of a spinner. */}
         {loading && (
-          <section className="result">
+          <section className="result spot">
             <div className="media">{preview && <img src={preview} alt="Your photo" />}<span className="scan" /></div>
             <div className="info">
-              <p className="eyebrow">Looking at your photo…</p>
-              <div className="sk sk-title" />
-              <div className="sk sk-line" />
-              <div className="sk sk-line short" />
+              <p className="eyebrow mono">Scanning…</p>
+              <ScanLog mode="photo" />
             </div>
           </section>
         )}
@@ -418,7 +464,7 @@ export default function Home() {
         {error && <p className="banner error">{error}</p>}
 
         {result && !item?.found && (
-          <section className="result">
+          <section className="result spot">
             {preview && <div className="media"><img src={preview} alt="Your photo" /></div>}
             <div className="info">
               <h2>Couldn&apos;t spot anything to buy</h2>
@@ -469,10 +515,9 @@ export default function Home() {
             </section>
 
             {pricesLoading && (
-              <section className="panel">
-                <p className="panel-title">Checking prices at every store…</p>
-                <div className="sk sk-deal" />
-                <div className="sk sk-row" /><div className="sk sk-row" /><div className="sk sk-row" />
+              <section className="panel spot">
+                <p className="panel-title mono">Comparing prices…</p>
+                <ScanLog mode="prices" />
               </section>
             )}
 
@@ -482,19 +527,13 @@ export default function Home() {
                 {[prices?.bestNew && { label: "Best new price", o: prices.bestNew }, prices?.bestUsed && { label: "Best used price", o: prices.bestUsed }]
                   .filter((d): d is { label: string; o: Offer } => Boolean(d))
                   .map(({ label, o }, i) => (
-                    <a key={label} className={i === 0 ? "deal top" : "deal"} href={o.url} target="_blank" rel="noopener noreferrer sponsored"
-                      onClick={() => track("deal_click", { store: o.store, total: o.total })}>
-                      <span className="deal-label"><Icon name="tag" size={14} /> {label}</span>
-                      <span className="deal-price">{money(o.total)}</span>
-                      <span className="deal-store"><StoreBadge store={o.store} size={24} /> {o.store} · {shippingText(o)}</span>
-                      <span className="deal-cta">Go to store <Icon name="external" size={15} /></span>
-                    </a>
+                    <DealCard key={label} label={label} offer={o} top={i === 0} shipping={shippingText(o)} />
                   ))}
               </section>
             )}
 
             {offers.length > 0 && !pricesLoading && (
-              <section className="panel">
+              <section className="panel spot">
                 <p className="panel-title">
                   All prices <span className="muted">from {prices!.sourcesUsed.join(" + ")}, cheapest first</span>
                 </p>
@@ -509,7 +548,7 @@ export default function Home() {
 
             {/* Store buttons: search the item on each store's own site. */}
             {result!.links.length > 0 && !pricesLoading && (
-              <section className="panel">
+              <section className="panel spot">
                 <p className="panel-title">
                   {prices && !prices.configured
                     ? "Compare it yourself"
@@ -522,7 +561,7 @@ export default function Home() {
                 )}
                 <div className="stores">
                   {result!.links.map((l) => (
-                    <a key={l.store} className="store" href={l.url} target="_blank" rel="noopener noreferrer sponsored"
+                    <a key={l.store} className="store spot" href={l.url} target="_blank" rel="noopener noreferrer sponsored"
                       onClick={() => track("store_link_click", { store: l.store })}>
                       <StoreBadge store={l.store} size={32} />
                       <span>{l.store}</span>

@@ -5,6 +5,12 @@ import "./globals.css";
 // Free usage tracking from Vercel (where the app will live). It counts visits and the events
 // we send with track(), without cookies or personal info. It only turns on once deployed.
 import { Analytics } from "@vercel/analytics/next";
+// Fonts: next/font downloads them once at build time and serves them from our own site,
+// so visitors' browsers never have to ask Google for them.
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
+
+const sans = Space_Grotesk({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "SnapFind",
@@ -14,11 +20,11 @@ export const metadata: Metadata = {
 };
 
 // Makes the app fit phone screens properly instead of looking zoomed out.
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#08080c" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#05070a" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body>
         {children}
         <Analytics />

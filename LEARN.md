@@ -266,3 +266,18 @@ Tap **Watch price** on any result and SnapFind writes down today's best price. E
 - If a price check fails (a store is down), we keep the old price instead of pretending it vanished.
 - The list is saved in your browser (localStorage), like Recent. No account needed.
 - **Limit for now:** the check happens when you *open* the app. Alerts while the app is closed need push notifications plus a small database and a timer on the server. That's the next upgrade.
+
+## The "scanner" look and its effects (app/fx.tsx)
+
+The design looks like a futuristic camera screen: dark background, a faint grid, neon green and cyan, and a code-style font (JetBrains Mono) for numbers and labels. Every effect lives in **app/fx.tsx**:
+
+- **Scramble**: the headline starts as random symbols and "decodes" into words. A timer swaps letters every 30 milliseconds, and each tick locks in a few more real letters.
+- **Typing hints**: the search box types product ideas by itself. It adds a letter, waits, adds another, pauses on the full word, then erases it.
+- **Viewfinder**: the big camera frame. Click it to snap, or drag a photo onto it (or anywhere on the page). It shows your mouse position like a targeting screen.
+- **Spotlight**: one listener watches the mouse. Whatever card it's over gets told the mouse position, and CSS draws a soft glow there.
+- **Tilt**: deal cards lean toward your mouse in 3D (CSS `perspective` + `rotateX/rotateY`). It's turned off on touch screens.
+- **CountUp**: prices roll up from $0 with "ease-out" (fast, then slowing down), using `requestAnimationFrame`, which is the browser's "draw the next frame" timer.
+- **ScanLog**: while waiting, a log shows each real step the app does (compress, fingerprint, check memory, ask the AI...).
+- **Keyboard shortcut**: press `/` or Ctrl/Cmd+K to jump into search.
+
+All of it turns off if your device's "reduce motion" setting is on (accessibility).

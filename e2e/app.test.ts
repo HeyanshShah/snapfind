@@ -46,7 +46,7 @@ async function visit(): Promise<Page> {
 
 test("home screen shows the search bar and example searches", async () => {
   const page = await visit();
-  assert.match(await page.textContent("h1") ?? "", /Find anything/);
+  assert.equal(await page.getAttribute("h1 span", "aria-label"), "Find anything."); // the decode effect keeps the real words here
   assert.equal(await page.locator(".chip").count(), 4);
   await page.close();
 });
