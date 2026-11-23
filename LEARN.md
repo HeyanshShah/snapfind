@@ -267,17 +267,19 @@ Tap **Watch price** on any result and SnapFind writes down today's best price. E
 - The list is saved in your browser (localStorage), like Recent. No account needed.
 - **Limit for now:** the check happens when you *open* the app. Alerts while the app is closed need push notifications plus a small database and a timer on the server. That's the next upgrade.
 
-## The "scanner" look and its effects (app/fx.tsx)
+## The bright look and the swipe effects (app/fx.tsx)
 
-The design looks like a futuristic camera screen: dark background, a faint grid, neon green and cyan, and a code-style font (JetBrains Mono) for numbers and labels. Every effect lives in **app/fx.tsx**:
+The design is bright and airy: white "glass" cards floating over soft colored blobs, with an electric blue to violet accent. The fun part is what happens as you **swipe up** (scroll). Every effect lives in **app/fx.tsx**:
 
-- **Scramble**: the headline starts as random symbols and "decodes" into words. A timer swaps letters every 30 milliseconds, and each tick locks in a few more real letters.
-- **Typing hints**: the search box types product ideas by itself. It adds a letter, waits, adds another, pauses on the full word, then erases it.
-- **Viewfinder**: the big camera frame. Click it to snap, or drag a photo onto it (or anywhere on the page). It shows your mouse position like a targeting screen.
-- **Spotlight**: one listener watches the mouse. Whatever card it's over gets told the mouse position, and CSS draws a soft glow there.
-- **Tilt**: deal cards lean toward your mouse in 3D (CSS `perspective` + `rotateX/rotateY`). It's turned off on touch screens.
-- **CountUp**: prices roll up from $0 with "ease-out" (fast, then slowing down), using `requestAnimationFrame`, which is the browser's "draw the next frame" timer.
-- **ScanLog**: while waiting, a log shows each real step the app does (compress, fingerprint, check memory, ask the AI...).
+- **Reveal**: things start a little lower and see-through, then slide into place the first time you scroll to them. The browser's `IntersectionObserver` tells us "this just appeared on screen."
+- **StackCards**: the "How it works" cards stick near the top (CSS `position: sticky`) and pile up like a deck. As the next card slides over, we shrink the one underneath a tiny bit.
+- **PriceRace**: price bars grow from zero like a race when they scroll into view. The cheapest new price gets the colored bar.
+- **ScrollProgress**: the thin bar at the very top fills up as you scroll. It also tells CSS the scroll position, so the background blobs drift slower than the page (that's called **parallax**, and it makes things feel deep).
+- **WordsIn**: the headline words float up one by one, from blurry to sharp.
+- **Typing hints**: the search box types product ideas by itself.
+- **Viewfinder**: the camera box. Tap it, or drop a photo anywhere on the page.
+- **Spotlight**, **Tilt**, **CountUp**: a soft glow follows your mouse, deal cards lean toward it in 3D, and prices roll up from $0.
+- **ScanLog**: while waiting, a list shows each real step the app is doing.
 - **Keyboard shortcut**: press `/` or Ctrl/Cmd+K to jump into search.
 
-All of it turns off if your device's "reduce motion" setting is on (accessibility).
+Scroll effects only redraw once per screen refresh (`requestAnimationFrame`), so they stay smooth. All motion turns off if your device's "reduce motion" setting is on.

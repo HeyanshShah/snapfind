@@ -1,6 +1,7 @@
 // app/fx.tsx
 // The "special effects" that make SnapFind feel alive. Each one is small on its own:
-// - Scramble: text that "decodes" from random symbols, like a hacker movie
+// - WordsIn: headline words float up one by one
+// - Reveal / StackCards / PriceRace / ScrollProgress: effects that play as you scroll
 // - useTypingHint: the search box types product ideas by itself
 // - CountUp: prices roll up from $0 like a slot machine
 // - Tilt: cards lean toward your mouse in 3D
@@ -17,30 +18,15 @@ function calm(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*<>/";
-
-// Text that starts as random symbols and settles into the real words, letter by letter.
-export function Scramble({ text, className }: { text: string; className?: string }) {
-  const [shown, setShown] = useState(text);
-  useEffect(() => {
-    if (calm()) return setShown(text);
-    let frame = 0;
-    const total = text.length * 2 + 10; // how many steps the effect takes
-    const id = setInterval(() => {
-      frame++;
-      const settled = Math.floor((frame / total) * text.length * 1.4); // letters already "decoded"
-      setShown(
-        text
-          .split("")
-          .map((ch, i) => (i < settled || ch === " " ? ch : GLYPHS[Math.floor(Math.random() * GLYPHS.length)]))
-          .join(""),
-      );
-      if (settled >= text.length) clearInterval(id);
-    }, 30);
-    return () => clearInterval(id);
-  }, [text]);
-  // aria-label: screen readers read the real text, not the random symbols.
-  return <span className={className} aria-label={text}>{shown}</span>;
+// A headline whose words float up one after another, slightly blurred, then sharpen.
+export function WordsIn({ text, className = "", start = 0 }: { text: string; className?: string; start?: number }) {
+  return (
+    <span className={`words ${className}`} aria-label={text}>
+      {text.split(" ").map((w, i) => (
+        <span key={i} className="word" aria-hidden="true" style={{ animationDelay: `${start + i * 90}ms` }}>{w}</span>
+      ))}
+    </span>
+  );
 }
 
 // The search box "types" ideas by itself: "Try: AirPods Pro 2", erase, "Try: PS5 Slim"...
@@ -163,7 +149,7 @@ export function ScanLog({ mode }: { mode: "photo" | "prices" }) {
 // It shows where your mouse is, like a real targeting screen.
 export function Viewfinder({ onFile, disabled }: { onFile: (f: File) => void; disabled: boolean }) {
   const [over, setOver] = useState(false); // is a photo being dragged over it?
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null); // where the mouse is, in %
   return (
     <label
       className={over ? "viewfinder spot over" : "viewfinder spot"}
@@ -184,19 +170,127 @@ export function Viewfinder({ onFile, disabled }: { onFile: (f: File) => void; di
       <span className="corner tl" /><span className="corner tr" /><span className="corner bl" /><span className="corner br" />
       <span className="beam" />
       {pos && <span className="cross" style={{ left: `${pos.x}%`, top: `${pos.y}%` }} />}
-      <span className="vf-top mono">
-        <span className="rec" /> LIVE · {pos ? `X:${String(pos.x).padStart(3, "0")} Y:${String(pos.y).padStart(3, "0")}` : "READY"}
-      </span>
       <span className="vf-center">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.6l1.5-2h6.8l1.5 2h1.6A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5zM12 9.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />
         </svg>
         <strong>{over ? "Drop it to scan" : "Tap to snap a photo"}</strong>
-        <span className="mono muted">or drag an image here</span>
+        <span className="muted">or drop an image anywhere</span>
       </span>
-      <span className="vf-bottom mono">AI VISION · LIVE PRICE CHECK</span>
       <input type="file" accept="image/*" capture="environment" disabled={disabled} hidden
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
     </label>
+  );
+}
+
+// Makes things slide and fade in when you scroll them into view.
+// IntersectionObserver is the browser telling us "this element just appeared on screen".
+export function Reveal({ children, className = "", delay = 0, as: Tag = "div" }: {
+  children: React.ReactNode; className?: string; delay?: number; as?: "div" | "section" | "li";
+}) {
+  const ref = useRef<HTMLElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (calm() || !("IntersectionObserver" in window)) return setSeen(true);
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setSeen(true); io.disconnect(); } // only animate the first time
+    }, { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    // @ts-expect-error: ref works the same on div, section, and li
+    <Tag ref={ref} className={`reveal ${seen ? "in" : ""} ${className}`} style={{ transitionDelay: `${delay}ms` }}>
+      {children}
+    </Tag>
+  );
+}
+
+// The thin colored bar at the very top that fills up as you scroll down the page.
+// It also shares the scroll position with CSS (--scroll) so backgrounds can drift (parallax).
+export function ScrollProgress() {
+  const bar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const p = max > 0 ? window.scrollY / max : 0;
+      if (bar.current) bar.current.style.transform = `scaleX(${p})`;
+      document.documentElement.style.setProperty("--scroll", String(window.scrollY));
+    };
+    // Only redraw once per frame, even if the scroll event fires 100 times.
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  return <div className="progress" ref={bar} aria-hidden="true" />;
+}
+
+// Cards that stick to the top and pile up like a deck as you swipe up.
+// Each card shrinks a little as the next one slides over it.
+export function StackCards({ cards }: { cards: { kicker: string; title: string; text: string; art: React.ReactNode }[] }) {
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (calm()) return;
+    const items = Array.from(wrap.current?.querySelectorAll<HTMLElement>(".stack-card") ?? []);
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      items.forEach((card, i) => {
+        const next = items[i + 1];
+        if (!next) return;
+        const a = card.getBoundingClientRect();
+        const b = next.getBoundingClientRect();
+        // 0 = the next card is far below, 1 = it fully covers this card.
+        const covered = Math.min(1, Math.max(0, 1 - (b.top - a.top) / a.height));
+        card.style.transform = `scale(${1 - covered * 0.06})`;
+        card.style.filter = `brightness(${1 - covered * 0.03})`;
+      });
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
+  }, []);
+  return (
+    <div className="stack" ref={wrap}>
+      {cards.map((c, i) => (
+        <article key={c.title} className="stack-card" style={{ top: `${88 + i * 18}px` }}>
+          <div className="stack-text">
+            <span className="kicker">{c.kicker}</span>
+            <h3>{c.title}</h3>
+            <p>{c.text}</p>
+          </div>
+          <div className="stack-art">{c.art}</div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+// Price bars that grow from zero when they scroll into view, like a race.
+export function PriceRace({ rows }: { rows: { store: string; price: number; best?: boolean }[] }) {
+  const max = Math.max(...rows.map((r) => r.price));
+  return (
+    <Reveal className="race">
+      {rows.map((r, i) => (
+        <div key={r.store} className={r.best ? "race-row best" : "race-row"}>
+          <span className="race-store">{r.store}</span>
+          <span className="race-track">
+            <span className="race-bar" style={{ width: `${(r.price / max) * 100}%`, transitionDelay: `${150 + i * 120}ms` }} />
+          </span>
+          <span className="race-price">${r.price}</span>
+        </div>
+      ))}
+    </Reveal>
   );
 }

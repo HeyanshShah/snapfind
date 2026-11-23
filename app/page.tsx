@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon, StoreBadge, money, ago } from "./ui";
-import { Scramble, useTypingHint, CountUp, useTilt, useSpotlight, ScanLog, Viewfinder } from "./fx";
+import { WordsIn, useTypingHint, CountUp, useTilt, useSpotlight, ScanLog, Viewfinder, Reveal, ScrollProgress, StackCards, PriceRace } from "./fx";
 import { track } from "@vercel/analytics";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
@@ -85,7 +85,7 @@ function DealCard({ label, offer, top, shipping }: { label: string; offer: Offer
   return (
     <a ref={ref} className={top ? "deal spot top" : "deal spot"} href={offer.url} target="_blank" rel="noopener noreferrer sponsored"
       onClick={() => track("deal_click", { store: offer.store, total: offer.total })}>
-      <span className="deal-label mono"><Icon name="tag" size={14} /> {label}</span>
+      <span className="deal-label"><Icon name="tag" size={14} /> {label}</span>
       <span className="deal-price mono"><CountUp value={offer.total} format={money} /></span>
       <span className="deal-store"><StoreBadge store={offer.store} size={24} /> {offer.store} · {shipping}</span>
       <span className="deal-cta">Go to store <Icon name="external" size={15} /></span>
@@ -379,21 +379,24 @@ export default function Home() {
         const f = e.dataTransfer.files?.[0];
         if (f?.type.startsWith("image/")) processFile(f);
       }}>
-      {dragging && !home && <div className="drop-overlay mono">Drop to scan</div>}
+      <ScrollProgress />
+      {/* Soft colored blobs behind everything. They drift slower than you scroll (parallax). */}
+      <div className="blobs" aria-hidden="true"><span /><span /><span /></div>
+      {dragging && !home && <div className="drop-overlay">Drop to scan</div>}
       {/* The top bar: logo on the left. Tapping it goes back to the start. */}
       <header className="topbar">
         <button className="brand" onClick={reset} aria-label="SnapFind home">
           <span className="brand-mark"><Icon name="search" size={18} /></span>
           SnapFind
         </button>
-        <span className="topbar-note mono"><span className="dot-live" /> System online</span>
+        <span className="topbar-note">Free · No sign-up</span>
       </header>
 
       <main className={home ? "wrap home" : "wrap"}>
         {home && (
           <section className="hero">
-            <p className="eyebrow mono"><Icon name="spark" size={14} /> Visual search engine v2</p>
-            <h1><Scramble text="Find anything." /><br /><Scramble className="grad" text="Pay less for it." /></h1>
+            <p className="eyebrow"><Icon name="spark" size={14} /> AI-powered price finder</p>
+            <h1><WordsIn text="Find anything." /><br /><WordsIn className="grad" text="Pay less for it." start={250} /></h1>
             <p className="sub">Take a photo of sneakers, a gadget, a car, anything. We tell you what it is and which store has the best price.</p>
           </section>
         )}
@@ -414,7 +417,7 @@ export default function Home() {
             <Icon name="camera" />
             <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={loading} hidden />
           </label>
-          <kbd className="kbd mono" aria-hidden="true">/</kbd>
+          <kbd className="kbd" aria-hidden="true">/</kbd>
           <button type="submit" className="go" disabled={!typed.trim() || pricesLoading} aria-label="Search">
             <Icon name="arrow" />
           </button>
@@ -438,11 +441,6 @@ export default function Home() {
               ))}
             </div>
             <Viewfinder onFile={processFile} disabled={loading} />
-            <ol className="steps">
-              <li className="spot"><b className="mono">01</b><span><strong>Snap or search</strong>Photo or name, either works.</span></li>
-              <li className="spot"><b className="mono">02</b><span><strong>AI identifies it</strong>The exact product and its typical price.</span></li>
-              <li className="spot"><b className="mono">03</b><span><strong>Pay the least</strong>Every store compared, best deal on top.</span></li>
-            </ol>
           </>
         )}
 
@@ -455,7 +453,7 @@ export default function Home() {
           <section className="result spot">
             <div className="media">{preview && <img src={preview} alt="Your photo" />}<span className="scan" /></div>
             <div className="info">
-              <p className="eyebrow mono">Scanning…</p>
+              <p className="eyebrow">Scanning your photo…</p>
               <ScanLog mode="photo" />
             </div>
           </section>
@@ -516,7 +514,7 @@ export default function Home() {
 
             {pricesLoading && (
               <section className="panel spot">
-                <p className="panel-title mono">Comparing prices…</p>
+                <p className="panel-title">Comparing prices…</p>
                 <ScanLog mode="prices" />
               </section>
             )}
@@ -618,6 +616,58 @@ export default function Home() {
             </div>
           </section>
         )}
+        {/* The scroll story: only on the home screen, below the fold. */}
+        {home && (
+          <div className="story">
+            <Reveal as="section" className="story-head">
+              <span className="kicker">How it works</span>
+              <h2>Three seconds from <span className="grad">"what's that?"</span> to the best price.</h2>
+            </Reveal>
+            <StackCards cards={[
+              { kicker: "Step 1", title: "Snap it or say it", text: "Point your camera at sneakers, a gadget, a lamp, anything. Or just type the name.",
+                art: <div className="art art-snap"><span className="art-frame"><Icon name="camera" size={40} /></span></div> },
+              { kicker: "Step 2", title: "AI knows what it is", text: "Our vision AI reads logos, shapes and labels to name the exact product and what it usually costs.",
+                art: <div className="art art-ai"><span className="tag-chip">Air Jordan 1 · 98% match</span><span className="tag-chip faint">Sneakers · Nike</span></div> },
+              { kicker: "Step 3", title: "Every store, one answer", text: "We check Google Shopping and eBay at the same time, throw out junk listings, and put the best deal on top.",
+                art: <div className="art art-deal"><span className="art-price">$180</span><span className="art-save">Save $74</span></div> },
+            ]} />
+
+            <Reveal as="section" className="story-head">
+              <span className="kicker">The price race</span>
+              <h2>Same shoe. <span className="grad">Five prices.</span></h2>
+              <p className="sub">This is why you check before you buy. Example prices for one pair of sneakers:</p>
+            </Reveal>
+            <PriceRace rows={[
+              { store: "StockX", price: 254 },
+              { store: "Amazon", price: 199 },
+            { store: "Foot Locker", price: 184 },
+              { store: "Nike (new)", price: 180, best: true },
+              { store: "eBay (used)", price: 145 },
+            ]} />
+
+            <section className="features">
+              {[
+                { icon: "bell" as const, title: "Price-drop alerts", text: "Tap Watch and we re-check every time you come back." },
+                { icon: "bolt" as const, title: "Instant repeats", text: "Seen it before? The answer comes back in a blink." },
+                { icon: "share" as const, title: "Share the find", text: "Turn any deal into a card for your story." },
+              ].map((f, i) => (
+                <Reveal key={f.title} className="feature spot" delay={i * 120}>
+                  <span className="feature-icon"><Icon name={f.icon} size={22} /></span>
+                  <strong>{f.title}</strong>
+                  <span>{f.text}</span>
+                </Reveal>
+              ))}
+            </section>
+
+            <Reveal as="section" className="cta">
+              <h2>Your next find is one snap away.</h2>
+              <button className="cta-btn" onClick={() => { window.scrollTo({ top: 0, behavior: "smooth" }); searchRef.current?.focus({ preventScroll: true }); }}>
+                <Icon name="camera" size={20} /> Start snapping
+              </button>
+            </Reveal>
+          </div>
+        )}
+
       </main>
       <footer className="foot">SnapFind · prices change often, always check the store before buying</footer>
     </div>

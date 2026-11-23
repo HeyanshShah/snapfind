@@ -16,11 +16,11 @@ export const metadata: Metadata = {
   title: "SnapFind",
   description: "Point your camera at anything and find out what it is and where to buy it.",
   // Makes "Add to Home Screen" on iPhones open SnapFind full screen, like a real app.
-  appleWebApp: { capable: true, title: "SnapFind", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "SnapFind", statusBarStyle: "default" },
 };
 
 // Makes the app fit phone screens properly instead of looking zoomed out.
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#05070a" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f6f7fb" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
