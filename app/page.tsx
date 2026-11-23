@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon, StoreBadge, money, ago } from "./ui";
-import { WordsIn, useTypingHint, CountUp, useTilt, useSpotlight, ScanLog, Viewfinder, Reveal, ScrollProgress, StackCards, PriceRace } from "./fx";
+import { WordsIn, useTypingHint, CountUp, useTilt, useSpotlight, ScanLog, Viewfinder, Reveal, ScrollProgress, StackCards, PriceRace, useTheme, ThemeSwitch, Starfield } from "./fx";
 import { track } from "@vercel/analytics";
 import type { Item } from "@/lib/identify";
 import type { ShopLink } from "@/lib/shopLinks";
@@ -124,6 +124,7 @@ export default function Home() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false); // is a photo being dragged over the page?
   useSpotlight();
+  const [theme, setTheme] = useTheme(); // which of the four looks is on
 
   // Keyboard shortcut: press "/" or Ctrl/Cmd+K anywhere to jump into the search box.
   useEffect(() => {
@@ -380,6 +381,8 @@ export default function Home() {
         if (f?.type.startsWith("image/")) processFile(f);
       }}>
       <ScrollProgress />
+      {theme === "nebula" && <Starfield />}
+      <ThemeSwitch theme={theme} onChange={setTheme} />
       {/* Soft colored blobs behind everything. They drift slower than you scroll (parallax). */}
       <div className="blobs" aria-hidden="true"><span /><span /><span /></div>
       {dragging && !home && <div className="drop-overlay">Drop to scan</div>}

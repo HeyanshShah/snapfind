@@ -283,3 +283,12 @@ The design is bright and airy: white "glass" cards floating over soft colored bl
 - **Keyboard shortcut**: press `/` or Ctrl/Cmd+K to jump into search.
 
 Scroll effects only redraw once per screen refresh (`requestAnimationFrame`), so they stay smooth. All motion turns off if your device's "reduce motion" setting is on.
+
+## Four dark styles (app/themes.css)
+
+The app can wear four "skins". The `<html>` tag gets `data-theme="aurora"` (or obsidian, nebula, chrome), and **app/themes.css** swaps the color tokens. The layout never changes, only the paint. Tap the pill at the bottom of the screen to switch. Your pick is saved in your browser, and a link like `?theme=nebula` opens a specific one.
+
+- **Aurora**: big blurry color blobs that slowly swirl and shift color behind frosted-glass cards (`backdrop-filter: blur`).
+- **Obsidian**: pure black and white. Important boxes get a border of light that spins around them. CSS can't normally animate an angle, so we register one with `@property --angle` and spin a `conic-gradient` (a cone of color) behind a 1px gap.
+- **Nebula**: a star field drawn on a `<canvas>` 60 times a second. Stars twinkle, drift, scroll at different speeds (parallax), get pushed away from your finger, and connect to it with lines. Every so often a shooting star flies past.
+- **Chrome**: a rainbow gradient three times wider than the text, sliding forever, so it shimmers like a hologram.

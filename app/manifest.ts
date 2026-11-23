@@ -12,8 +12,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Point your camera at anything and find the best place to buy it.",
     start_url: "/",
     display: "standalone", // full screen, no browser address bar
-    background_color: "#f6f7fb",
-    theme_color: "#f6f7fb",
+    background_color: "#05060f",
+    theme_color: "#05060f",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },

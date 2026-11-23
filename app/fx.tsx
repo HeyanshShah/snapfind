@@ -294,3 +294,127 @@ export function PriceRace({ rows }: { rows: { store: string; price: number; best
     </Reveal>
   );
 }
+
+// ---------- Themes ----------
+// The four dark looks. The page keeps one, saved in this browser.
+export const THEMES = [
+  { id: "aurora", name: "Aurora", swatch: "linear-gradient(135deg, #8b7cff, #3ee8d4)" },
+  { id: "obsidian", name: "Obsidian", swatch: "linear-gradient(135deg, #fff, #3b82f6)" },
+  { id: "nebula", name: "Nebula", swatch: "linear-gradient(135deg, #ff5fd2, #ffcf6b)" },
+  { id: "chrome", name: "Chrome", swatch: "linear-gradient(135deg, #b9f2ff, #ffb3f0, #fff3b0)" },
+] as const;
+export type ThemeId = (typeof THEMES)[number]["id"];
+
+// Picks the theme: a ?theme= link wins, then the one you picked last time, then Aurora.
+export function useTheme(): [ThemeId, (t: ThemeId) => void] {
+  const [theme, setTheme] = useState<ThemeId>("aurora");
+  useEffect(() => {
+    const ok = (t: string | null): t is ThemeId => THEMES.some((x) => x.id === t);
+    const fromUrl = new URLSearchParams(location.search).get("theme");
+    let saved: string | null = null;
+    try { saved = localStorage.getItem("snapfind-theme"); } catch {}
+    const t = ok(fromUrl) ? fromUrl : ok(saved) ? saved : "aurora";
+    setTheme(t);
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme; // the CSS in themes.css reacts to this
+  }, [theme]);
+  const choose = (t: ThemeId) => {
+    setTheme(t);
+    try { localStorage.setItem("snapfind-theme", t); } catch {}
+  };
+  return [theme, choose];
+}
+
+// The pill at the bottom of the screen for flipping between looks.
+export function ThemeSwitch({ theme, onChange }: { theme: ThemeId; onChange: (t: ThemeId) => void }) {
+  return (
+    <div className="theme-switch" role="radiogroup" aria-label="Choose a style">
+      {THEMES.map((t) => (
+        <button key={t.id} role="radio" aria-checked={theme === t.id} className={theme === t.id ? "on" : ""} onClick={() => onChange(t.id)}>
+          <span className="sw" style={{ background: t.swatch }} />
+          <span>{t.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Nebula's star field ----------
+// A <canvas> is a blank drawing board. 60 times a second we wipe it and redraw every star.
+// Stars twinkle and drift. Near your finger or mouse they get pushed away a little and
+// light up with lines to it, like a constellation. Every few seconds, a shooting star.
+export function Starfield() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current!;
+    const ctx = canvas.getContext("2d")!;
+    const still = calm();
+    let w = 0, h = 0, dpr = 1, raf = 0;
+    type Star = { x: number; y: number; z: number; tw: number };
+    let stars: Star[] = [];
+    const pointer = { x: -999, y: -999 };
+    let shoot: { x: number; y: number; vx: number; vy: number; life: number } | null = null;
+
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = window.innerWidth; h = window.innerHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const count = Math.min(260, Math.round((w * h) / 5200));
+      // z = how close the star is (0 far, 1 near). Near stars are bigger and move more.
+      stars = Array.from({ length: count }, () => ({ x: Math.random() * w, y: Math.random() * h, z: Math.random(), tw: Math.random() * Math.PI * 2 }));
+    };
+    const move = (e: PointerEvent) => { pointer.x = e.clientX; pointer.y = e.clientY; };
+    const leave = () => { pointer.x = pointer.y = -999; };
+
+    const draw = (t: number) => {
+      ctx.clearRect(0, 0, w, h);
+      const scroll = window.scrollY;
+      for (const s of stars) {
+        s.x += 0.02 + s.z * 0.08; // slow drift to the right
+        if (s.x > w) s.x = 0;
+        let y = (s.y - scroll * (0.05 + s.z * 0.2)) % h; // nearer stars scroll faster (parallax)
+        if (y < 0) y += h;
+        let x = s.x;
+        const dx = x - pointer.x, dy = y - pointer.y, d = Math.hypot(dx, dy);
+        if (d < 150) {
+          const push = (1 - d / 150) * 18 * s.z; // gently pushed away from your finger
+          x += (dx / (d || 1)) * push; y += (dy / (d || 1)) * push;
+          ctx.strokeStyle = `rgba(255, 150, 230, ${(1 - d / 150) * 0.35})`;
+          ctx.lineWidth = 0.6;
+          ctx.beginPath(); ctx.moveTo(pointer.x, pointer.y); ctx.lineTo(x, y); ctx.stroke();
+        }
+        const twinkle = 0.55 + 0.45 * Math.sin(t / 600 + s.tw);
+        const r = 0.4 + s.z * 1.5;
+        ctx.fillStyle = `rgba(255, ${220 + Math.round(s.z * 35)}, 255, ${twinkle * (0.35 + s.z * 0.65)})`;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      }
+      // Shooting star: start one now and then, and draw it as a fading streak.
+      if (!shoot && Math.random() < 0.004) shoot = { x: Math.random() * w * 0.6, y: Math.random() * h * 0.4, vx: 9, vy: 4, life: 1 };
+      if (shoot) {
+        const g = ctx.createLinearGradient(shoot.x, shoot.y, shoot.x - shoot.vx * 12, shoot.y - shoot.vy * 12);
+        g.addColorStop(0, `rgba(255, 220, 240, ${shoot.life})`); g.addColorStop(1, "rgba(255, 220, 240, 0)");
+        ctx.strokeStyle = g; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(shoot.x, shoot.y); ctx.lineTo(shoot.x - shoot.vx * 12, shoot.y - shoot.vy * 12); ctx.stroke();
+        shoot.x += shoot.vx; shoot.y += shoot.vy; shoot.life -= 0.018;
+        if (shoot.life <= 0) shoot = null;
+      }
+      if (!still) raf = requestAnimationFrame(draw);
+    };
+
+    resize();
+    raf = requestAnimationFrame(draw);
+    window.addEventListener("resize", resize);
+    window.addEventListener("pointermove", move, { passive: true });
+    window.addEventListener("pointerleave", leave);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerleave", leave);
+    };
+  }, []);
+  return <canvas ref={ref} className="starfield" aria-hidden="true" />;
+}
